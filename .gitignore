@@ -1,6 +1,7 @@
 .idea
 *.tar
 logs
+output/
 .venv
 __pycache__
 *.pyc

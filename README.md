@@ -1,178 +1,139 @@
-<h1 align="center">
-  <p>
-  <img src="docs/images/readme_header.jpg" alt="logo">
-    </p>
-</h1>
+# cyMedia2Markdown
 
-<p align="center">
-    <a href="https://hellogithub.com/repository/d869461d98d245d388b50e25b6a80dae" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=d869461d98d245d388b50e25b6a80dae&claim_uid=uT2Sc8Xli4PUA76" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-</p>
+cyMedia2Markdown 是一个本地优先的音视频转 Markdown 工具。它基于上游项目
+[hanshuaikang/AI-Media2Doc](https://github.com/hanshuaikang/AI-Media2Doc) 二次开发，
+保留 Web 前后端体验，并把主要处理链路调整为本机完成：本地转写、本地大模型调用、本地媒体缓存和本地截图。
 
-<p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Platform-Web-orange" alt="Web Platform">
-  <img src="https://img.shields.io/badge/Docker-Support-blue?logo=docker" alt="Docker Support">
-</p>
+## 项目概览
 
+本项目面向需要把公开课程、技术演讲、会议录屏或本地音视频整理成结构化笔记的场景。典型流程是：
 
-### 📖 简介
+1. 上传音频/视频，或输入公开可访问的视频链接。
+2. 后端抽取音频并通过 `faster-whisper` 在本机转写。
+3. 调用本机 `codex exec` 生成 Markdown、总结、问答内容或截图标记。
+4. 对 URL 视频按生成内容中的时间点本地截帧，并插入到 Markdown。
+5. 在前端查看、继续追问、导出 Markdown/字幕/思维导图等结果。
 
-AI 视频图文创作助手是一款 Web 工具, 基于 AI 大模型, 一键将视频和音频转化为各种风格的文档, 无需登录注册, 前后端本地部署，以极低的成本体验 AI 视频/音频转风格文档服务。
+## 当前特性
 
+- 本地优先：不依赖云端 ASR，默认使用 `faster-whisper`。
+- Codex CLI 生成：复用本机 Codex CLI 登录态调用大模型。
+- URL 视频处理：通过 `yt-dlp` 下载公开视频并抽音频。
+- 本地缓存：同一 URL 可复用已下载媒体、音频和截图。
+- 智能截图：根据 Markdown 中的 `#image[秒数]` 标记截取视频画面。
+- 前端工作台：支持上传、转写、内容生成、AI 对话、结果查看和导出。
+- Docker 与本地运行：保留前后端 Dockerfile，并提供本地后端运行脚本。
 
-### ✨ 核心功能
+## 目录结构
 
-- ✅ **完全开源**：MIT 协议授权，支持本地部署。
-- 🔒 **隐私保护**：无需登录注册，任务记录保存在本地
-- 💻 **前端处理**：采用 ffmpeg wasm 技术，无需本地安装 ffmpeg
-- 🎯 **多种风格支持**：支持小红书/公众号/知识笔记/思维导图/内容总结等多种文档风格支持。
-- 🤖 **AI 对话**：支持针对视频内容进行 AI 二次问答。
-- 🎬 **支持字幕导出**: 结果一键导出为字幕文件。
-- 🖼️ **智能截图**: 基于字幕信息智能截图并插入文章, 无需视觉大模型, 实现真正的图文并茂。
-- 🎨 **支持自定义 Prompt**：支持在前端自定义配置 prompt。
-- 🐳 **一键部署**：支持 Docker 一键部署。
-- 🔒 **支持设置访问密码**: 后端设置访问密码之后, 前端用户需要填写该密码才可以正常使用。
-
-
-### 🔜 未来计划
-- 🎙️ 音频识别支持使用 fast-whisper 本地大模型处理，进一步降低成本
-
-### 👾 开发者的废话
-
-AI 视频创作助手源于我年初的一个想法, 作为一个喜欢阅读的人, 我更希望将一些视频内容转化为文字, 方便我进行二次阅读思考和总结记录笔记, 但市面上并没有一个好的工具来实现这个想法, 大多数工具都需要登录和付费, 我不太想在互联网上注册过多的账号, 同时也不想将自己想要总结的内容上传至除了云厂商之外的第三方平台，因此我开发了这个小应用，MIT 协议, 任何人都可以以极低的成本去体验音视频转文本。
-
-### 💬 哪里可以找到我
-公众号(韩数同学)
-<p align="left">
-    <img src="docs/images/wxgzh/hstx.jpg" alt="index" width="20%">
-</p>
-
-或者首页置顶 issue 加入微信交流群. 如果部署遇到问题，我下班之后看到后一般会回复。
-
-
-### 项目截图
-
-#### 全新设计的首页, 尽力之作
-
-<p align="center">
-    <img src="docs/images/index.jpg" alt="index" width="80%">
-</p>
-
-#### 全新功能: 支持智能截图并插入到文中对应位置(本地方案, 无需视觉大模型, 0成本)
-
-开启方式, 点击自定义设置->智能截图 选择打开。
-
-<p align="center">
-<img src="docs/images/screenshot.png" alt="task details" width="80%">
-</p>
-
-#### 全新设计的结果页, 支持一键导出为字幕。
-<p align="center">
-<img src="docs/images/details.png" alt="task details" width="80%">
-</p>
-
-#### 支持自定义 prompt
-<p align="center">
-<img src="docs/images/custom_prompt.png" alt="task details" width="80%">
-</p>
-
-
-
-### 📦 docker 本地一键部署
-0️⃣：安装 `docker`, 这个网上有教程, Windows 玩家建议使用 `wsl` 启动该项目。
-
-1️⃣：下载项目首页的 docker-compose.yaml 文件
-
-2️⃣：参考`variables_template.env` 在项目根目录下生成 `variables.env` 文件。 请根据 [后端部署指引 / 配置项说明](https://github.com/hanshuaikang/AI-Media2Doc/blob/main/backend/README.md#%E5%9C%A8%E7%81%AB%E5%B1%B1%E5%BC%95%E6%93%8E%E8%8E%B7%E5%8F%96%E5%AF%B9%E5%BA%94%E7%9A%84%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F%E7%9A%84%E5%80%BC) 完善 `variables.env` 文件中的环境变量。
-variables.env 必须与 docker-compose.yaml 在同一目录下, 建议建个新的文件夹单独存放这两个文件。
-
-3️⃣：运行, 在 docker-compose.yaml 所在目录下运行:
-
-```shell
-$ docker-compose -f docker-compose.yaml up -d
+```text
+backend/                 FastAPI 后端，本地 ASR、媒体处理、Codex CLI 调用
+frontend/                Vue 3 + Vite 前端
+docs/                    README 截图、赞助与展示素材
+tools/                   批量处理辅助脚本
+variables_template.env   环境变量模板
+docker-compose.yaml      容器化启动示例
+NOTICE.md                版权、鸣谢和内容合规说明
+LICENSE                  MIT License
 ```
 
+## 快速开始
 
-### 🔧 本地开发指南
+### 后端
 
-- [后端本地部署](./backend/README.md)
-- [前端本地部署](./frontend/README.md)
+前置要求：
 
+- Python 3.10+
+- 已安装并登录 Codex CLI
+- 本机可用的 ffmpeg 运行环境由 `imageio-ffmpeg` 提供
+- 如使用 CUDA 转写，需要匹配本机显卡和驱动环境
 
-### 🤝 赞助
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+```
 
-<table>
-  <thead>
-    <tr>
-      <th align="center" style="width: 150px;">
-        <a href="https://skywork.ai/p/mvVidS"><img src="./docs/images/sponsors/skywork.jpg" width="80px"><br>
-          <sub>天工超级智能体 1.0</sub><br>
-          <sub>调用海量工具完成各种任务</sub>
-        </a>
-      </th>
-    </tr>
-  </thead>
-</table>
+后端默认监听 `http://localhost:8080`。
 
+更多配置见 [backend/README.md](./backend/README.md)。
 
-### 🔄 处理流程
+### 前端
 
-<p align="center">
-<img src="docs/images/process_flow.jpg" alt="architecture" width="80%">
-</p>
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-### 🌵 支持开发者
-你可以关注我的小红书:
+前端默认由 Vite 启动，并请求本机后端服务。
 
-[韩数同学： 致力于分享 Github 上那些好玩、有趣、免费、实用的高质量项目](https://www.xiaohongshu.com/user/profile/5e2992b000000000010064a4)
+更多配置见 [frontend/README.md](./frontend/README.md)。
 
-微信公众号: **韩数同学**
+## 常用环境变量
 
-**或者请我吃一包辣条** , 作为一个超级喜欢吃辣条的人, 很多晚上维护开源项目都是边吃辣条边写代码的 🤪。如果你有很喜欢吃的辣条, 你可以投喂我吃一包辣条, 5毛一包的也可以, 我将直接开启代码狂暴模式(化身八爪鱼: 🐙)。
+可参考 [variables_template.env](./variables_template.env)。常用项包括：
 
-请留下你要赞助作者的辣条名称 (🤩❤️‍🔥): 支持卫龙/麻辣王子/博士牛筋/臭干子，禁止投喂(🥵😵😵‍💫🤧🥴): **缺牙齿**/**霸王丝**等有损本人生命值的辣条。
+```bash
+CODEX_CLI_PATH=codex
+CODEX_CLI_MODEL=gpt-5.5
+CODEX_CLI_REASONING_EFFORT=xhigh
+ASR_PROVIDER=faster-whisper
+ASR_LANGUAGE=auto
+FASTER_WHISPER_MODEL=large-v3
+FASTER_WHISPER_DEVICE=cuda
+FASTER_WHISPER_COMPUTE_TYPE=float16
+LOCAL_UPLOAD_DIR=local_storage/uploads
+LOCAL_MEDIA_DIR=local_storage/media
+LOCAL_SCREENSHOT_DIR=local_storage/screenshots
+YTDLP_COOKIES_FILE=
+WEB_ACCESS_PASSWORD=
+```
 
-同时请备注你的 github 名称, 方便我整理展示在项目主页。🙌
+CPU 环境建议把模型调小，例如 `small` 或 `base`，并设置：
 
-<p align="left">
- 赞助作者: <a href="https://afdian.com/a/hanshu-github">我的爱发电主页</a>
-</p>
+```bash
+FASTER_WHISPER_DEVICE=cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8
+```
 
-[赞助名单](./docs/sponsors.md)
+## 批量处理脚本
 
-### 🙌 致谢
-感谢这些朋友对本项目做出的贡献:
+[tools/batch_video_notes.py](./tools/batch_video_notes.py) 是一个本地批处理辅助脚本，用于调用后端 URL 媒体接口、转写、生成笔记并渲染 HTML。它适合处理已确认有权学习、整理或引用的公开视频。
 
-|  |  |                                                                                                                        |
-|:-:|:-:|:----------------------------------------------------------------------------------------------------------------------:|
-| <a href="https://github.com/ZhuoZhuoCrayon"><img src="https://github.com/ZhuoZhuoCrayon.png" width="50" height="50"/><br/>crayon</a> | <a href="https://github.com/cjx929"><img src="https://github.com/cjx929.png" width="50" height="50"/><br/>chen_jx</a> | <a href="https://github.com/LMseventeen"><img src="https://github.com/LMseventeen.png" width="50" height="50"/><br/>LMseventeen</a>  |
+脚本会把结果写入 `output/`。该目录已被 `.gitignore` 排除，因为里面可能包含字幕、截图、笔记和其他来自第三方媒体的派生内容，不应默认提交到公开仓库。
 
-感谢以下自媒体对本项目的关注和转发(以下排名不分先后), 大家感兴趣的话可以关注下他们 ～
+## 版权与内容合规
 
-| [HelloGithub](https://hellogithub.com)   |                           开源AI项目落地                            |                               [阮一峰的网络日志](https://www.ruanyifeng.com/blog/weekly/)                               |                               一飞开源                               |                             胖氪笔记                              |                          逛逛Github                            |                    小红书: 摸鱼的小李                            |
-|:----:|:-------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------:|:------------------------------------------------------------:|:-------------------------------------------------------------:|:------------------------------------------------------------:|:------------------------------------------------------------:|
-|<img src="docs/images/wxgzh/hellogithub.png" width="80" height="80"/>|<img src="docs/images/wxgzh/aild.png" width="80" height="80"/> |<img src="docs/images/wxgzh/ryf.png" width="80" height="80"/> | <img src="docs/images/wxgzh/yf.png" width="80" height="80"/> | <img src="docs/images/wxgzh/pk.png" width="80" height="80"/>  | <img src="docs/images/wxgzh/gg.png" width="80" height="80"/> | <img src="docs/images/wxgzh/myxl.png" width="80" height="80"/> 
+本仓库采用 [MIT License](./LICENSE)。本项目基于上游 MIT 开源项目二次开发：
 
-小红书:
-[AI-GitHub](https://www.xiaohongshu.com/user/profile/65c44d1200000000090254fc) | [逛逛Github](https://www.xiaohongshu.com/user/profile/65e05165000000000500b059)
+- 原始项目：[hanshuaikang/AI-Media2Doc](https://github.com/hanshuaikang/AI-Media2Doc)
+- 原始项目版权归原作者及其贡献者所有。
+- 本仓库新增或修改部分版权归对应贡献者所有，并继续按 MIT License 分发。
 
+请只处理你拥有权利、已获授权，或依法可进行个人学习、研究、引用和整理的音视频内容。公开视频链接不等于可再分发内容；由本工具生成的转写稿、截图、笔记和 HTML 可能仍受原始音视频版权约束。
 
-推特:
-| [Geek](https://x.com/geekbb) | [AIGCLINK](https://x.com/aigclink) | [ilovelife](https://x.com/ilovek8s) | [ahhhhfs](https://x.com/abskoop)
+更多说明见 [NOTICE.md](./NOTICE.md)。
 
-### 📄 许可证
+## 鸣谢
 
-本项目采用 [MIT 许可证](./LICENSE)
+感谢上游项目作者和贡献者提供完整的 AI Media2Doc 基础实现与开源许可。
 
-### 🔗 相关链接
+感谢以下项目和社区工具：
 
-- [volcengine-ai-app-lab](https://github.com/volcengine/ai-app-lab)
+- [AI-Media2Doc](https://github.com/hanshuaikang/AI-Media2Doc)
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg)
+- [Vue](https://vuejs.org/)
+- [Element Plus](https://element-plus.org/)
+- [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm)
+- [simple-mind-map](https://github.com/wanglin2/mind-map)
 
-- [throttled-py](https://github.com/ZhuoZhuoCrayon/throttled-py)：✨Python 限流库，合理限制、平滑云资源用量。
+上游 README 中列出的社区传播者、赞助者和贡献者同样值得感谢；本 fork 保留 `docs/` 中相关素材，仅用于延续原项目说明和鸣谢语境。
 
-### 其他 AI 工具:
-[Owl 猫头鹰小红书/公众号敏感词检测工具](https://owl.hanshutx.com/): 支持小红书、公众号敏感词检测，提交检测后自动识别文本中的敏感词并高亮显示，避免笔记违规, 免费使用。
+## 相关文档
 
-### 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=hanshuaikang/AI-Media2Doc&type=Date)](https://www.star-history.com/#hanshuaikang/AI-Media2Doc&Date)
+- [后端本地运行](./backend/README.md)
+- [前端本地运行](./frontend/README.md)
+- [赞助与原项目鸣谢素材](./docs/sponsors.md)

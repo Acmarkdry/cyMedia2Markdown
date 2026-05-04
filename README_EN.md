@@ -1,102 +1,134 @@
-<h1 align="center">
-  <p>
-  <img src="docs/images/logo.jpeg" alt="logo" width="50" height="50" style="border-radius: 50%;">
- </p>
-  AI Media2Doc Assistant
-</h1>
+# cyMedia2Markdown
 
-<p align="center">
-    <em>Based on AI large models, convert videos and audios to various document styles like Xiaohongshu/WeChat Official Account/Knowledge Notes/Mind Maps with one click.</em>
-</p>
-
-<p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Platform-Web-orange" alt="Web Platform">
-</p>
-
-<p align="center">
-    <img src="docs/images/index.jpg" alt="index" width="80%">
-</p>
+cyMedia2Markdown is a local-first audio/video to Markdown workspace. It is a fork and adaptation of
+[hanshuaikang/AI-Media2Doc](https://github.com/hanshuaikang/AI-Media2Doc), keeping the web frontend/backend workflow while moving the main processing path to the local machine: local transcription, local Codex CLI generation, local media caching and local screenshots.
 
 [中文文档](./README.md)
 
-### 📖 Introduction
+## Overview
 
-AI Media2Doc Assistant is a web tool based on AI large models that converts videos and audios to various document styles with one click. No login or registration required, with both frontend and backend supporting local deployment. Experience AI video/audio to styled document conversion services at an extremely low cost - I spent just five dollars for a month of development and testing.
+The project is designed for turning lectures, technical talks, meeting recordings and local media into structured notes. The typical flow is:
 
-### ✨ Core Features
+1. Upload an audio/video file, or submit a publicly accessible video URL.
+2. The backend extracts audio and transcribes it locally with `faster-whisper`.
+3. The backend calls local `codex exec` to generate Markdown, summaries, Q&A content or screenshot markers.
+4. For URL videos, screenshots are captured locally from generated timestamps and inserted into Markdown.
+5. The frontend lets you review, ask follow-up questions and export Markdown, subtitles or mind maps.
 
-- ✅ **Fully Open Source**: Licensed under MIT, supports local deployment.
-- 🔒 **Privacy Protection**: No login or registration required, task records saved locally.
-- 💻 **Frontend Processing**: Uses ffmpeg wasm technology, no need to install ffmpeg locally.
-- 🎯 **Multiple Style Support**: Supports various document styles like Xiaohongshu/WeChat Official Account/Knowledge Notes/Mind Maps/Content Summaries.
-- 🤖 **AI Conversation**: Supports secondary Q&A based on video content.
-- 🤖 **Local Deployment Friendly**: With basic development knowledge, you can get it running in no time.
-- 🐳 **One-Click Deployment**: Supports one-click deployment with Docker.
+## Features
 
-### 🔜 Future Plans
+- Local-first ASR with `faster-whisper`.
+- LLM generation through local Codex CLI credentials.
+- Public URL video handling through `yt-dlp`.
+- Local media, audio and screenshot cache.
+- Timestamp-based screenshot insertion with `#image[seconds]` markers.
+- Vue 3 frontend for upload, transcription, generation, chat, preview and export.
+- Docker files and local development scripts are retained.
 
-- 📷 Support intelligent extraction of video key frames, achieving true integration of text and images
-- 🎙️ Support audio recognition using fast-whisper local large model processing to further reduce costs
-- 🎨 Completely rebuild the frontend page using React for a smoother experience
+## Repository Layout
 
-### 📦 Installation Guide
-
-1) Image Build:
-
-```shell
-$ make docker-image
+```text
+backend/                 FastAPI backend for local ASR, media processing and Codex CLI calls
+frontend/                Vue 3 + Vite frontend
+docs/                    README images, sponsor materials and upstream display assets
+tools/                   Batch processing helper scripts
+variables_template.env   Environment variable template
+docker-compose.yaml      Container startup example
+NOTICE.md                Copyright, acknowledgements and content compliance notes
+LICENSE                  MIT License
 ```
 
-2) Please refer to the [Backend Deployment Guide / Configuration Instructions](https://github.com/hanshuaikang/AI-Media2Doc/blob/main/backend/README.md#%E5%9C%A8%E7%81%AB%E5%B1%B1%E5%BC%95%E6%93%8E%E8%8E%B7%E5%8F%96%E5%AF%B9%E5%BA%94%E7%9A%84%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F%E7%9A%84%E5%80%BC) to complete the `variables.env` file in the root directory.
+## Quick Start
 
-3) Run the Project:
+### Backend
 
-```shell
-$ make run
+Requirements:
+
+- Python 3.10+
+- Codex CLI installed and logged in
+- ffmpeg runtime provided by `imageio-ffmpeg`
+- Compatible GPU/driver environment when using CUDA transcription
+
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
 ```
 
-### 👾 Developer's Note
+The backend listens on `http://localhost:8080` by default.
 
-The AI Media2Doc Assistant originated from an idea I had at the beginning of the year. As someone who enjoys reading, I prefer to convert video content into text for easier re-reading, thinking, and note-taking. However, I couldn't find a good tool to achieve this - most tools required login and payment. I didn't want to register too many accounts on the internet, nor did I want to upload my content to third-party platforms other than cloud providers. Therefore, I developed this small application under the MIT license, allowing anyone to experience audio/video to text conversion at a minimal cost.
+See [backend/README.md](./backend/README.md) for more configuration details.
 
-### Project Screenshots
+### Frontend
 
-#### Support AI Q&A based on video content
-<p align="center">
-<img src="docs/images/details.png" alt="task details" width="80%">
-</p>
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-#### Support mind map generation
+The frontend is served by Vite and talks to the local backend by default.
 
-Generated mind maps can be exported to third-party platforms for editing and optimization
-<p align="center">
-<img src="docs/images/mindmap.jpg" alt="mindmap" width="80%">
-</p>
+See [frontend/README.md](./frontend/README.md) for more details.
 
-### 🔄 Processing Flow
+## Common Environment Variables
 
-<p align="center">
-<img src="docs/images/process_flow.jpg" alt="architecture" width="80%">
-</p>
+See [variables_template.env](./variables_template.env). Common settings include:
 
-### 🔧 Local Development Guide
+```bash
+CODEX_CLI_PATH=codex
+CODEX_CLI_MODEL=gpt-5.5
+CODEX_CLI_REASONING_EFFORT=xhigh
+ASR_PROVIDER=faster-whisper
+ASR_LANGUAGE=auto
+FASTER_WHISPER_MODEL=large-v3
+FASTER_WHISPER_DEVICE=cuda
+FASTER_WHISPER_COMPUTE_TYPE=float16
+LOCAL_UPLOAD_DIR=local_storage/uploads
+LOCAL_MEDIA_DIR=local_storage/media
+LOCAL_SCREENSHOT_DIR=local_storage/screenshots
+YTDLP_COOKIES_FILE=
+WEB_ACCESS_PASSWORD=
+```
 
-- [Backend Local Deployment](./backend/README.md)
-- [Frontend Local Deployment](./frontend/README.md)
+For CPU-only machines, use a smaller model such as `small` or `base` and set:
 
-### 📄 License
+```bash
+FASTER_WHISPER_DEVICE=cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8
+```
 
-This project is licensed under the [MIT License](./LICENSE)
+## Batch Helper
 
-### 🔗 Related Links
+[tools/batch_video_notes.py](./tools/batch_video_notes.py) calls the backend URL media endpoint, transcription task API, note generation and HTML rendering flow for a fixed list of videos. Use it only for media you are allowed to analyze, quote or summarize.
 
-- [volcengine-ai-app-lab](https://github.com/volcengine/ai-app-lab)
-- [throttled-py](https://github.com/ZhuoZhuoCrayon/throttled-py): ✨Python rate-limiting library, reasonably limits and smooths cloud resource usage.
+Generated files are written to `output/`, which is intentionally ignored because it may contain transcripts, screenshots, notes and HTML derived from third-party media.
 
+## Copyright And Compliance
 
-[韩数的开发笔记： 致力于分享 Github 上那些好玩、有趣、免费、实用的高质量项目](https://www.xiaohongshu.com/user/profile/5e2992b000000000010064a4)
+This repository is distributed under the [MIT License](./LICENSE). It is based on an upstream MIT-licensed project:
 
-### 🌟 Star History
+- Upstream: [hanshuaikang/AI-Media2Doc](https://github.com/hanshuaikang/AI-Media2Doc)
+- Original copyright belongs to the upstream author and contributors.
+- New or modified work in this fork belongs to the corresponding contributors and is distributed under the same MIT License.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hanshuaikang/AI-Media2Doc&type=Date)](https://www.star-history.com/#hanshuaikang/AI-Media2Doc&Date)
+Only process media that you own, have permission to use, or may legally analyze and quote. A public URL does not automatically grant redistribution rights for transcripts, screenshots or generated notes.
+
+See [NOTICE.md](./NOTICE.md) for details.
+
+## Acknowledgements
+
+Thanks to the upstream AI-Media2Doc author and contributors for the original implementation, documentation, screenshots and open-source foundation.
+
+Thanks also to the projects and tools this repository depends on:
+
+- [AI-Media2Doc](https://github.com/hanshuaikang/AI-Media2Doc)
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg)
+- [Vue](https://vuejs.org/)
+- [Element Plus](https://element-plus.org/)
+- [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm)
+- [simple-mind-map](https://github.com/wanglin2/mind-map)
+
+Upstream community mentions, sponsors and contributor materials remain under `docs/` to preserve the original project context and acknowledgements.
