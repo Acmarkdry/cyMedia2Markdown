@@ -41,9 +41,9 @@ ENV CODEX_CLI_PATH="codex" \
     LOCAL_UPLOAD_DIR="local_storage/uploads" \
     ASR_PROVIDER="faster-whisper" \
     ASR_LANGUAGE="auto" \
-    FASTER_WHISPER_MODEL="small" \
-    FASTER_WHISPER_DEVICE="auto" \
-    FASTER_WHISPER_COMPUTE_TYPE="auto"
+    FASTER_WHISPER_MODEL="large-v3" \
+    FASTER_WHISPER_DEVICE="cuda" \
+    FASTER_WHISPER_COMPUTE_TYPE="float16"
 
 EXPOSE 8080
 

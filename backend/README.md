@@ -21,7 +21,7 @@ codex login
 pip install -r requirements.txt
 ```
 
-首次运行 `faster-whisper` 会下载模型文件。默认模型是 `small`，本机性能足够时可以改成 `medium` 或 `large-v3`。
+首次运行 `faster-whisper` 会下载模型文件。默认按 4070 Ti 这类本地显卡配置为 `large-v3 + cuda + float16`，优先保证转写质量。
 
 ## 3. 可选环境变量
 
@@ -32,17 +32,18 @@ export CODEX_CLI_REASONING_EFFORT=xhigh
 export LOCAL_UPLOAD_DIR=local_storage/uploads
 export ASR_PROVIDER=faster-whisper
 export ASR_LANGUAGE=auto
-export FASTER_WHISPER_MODEL=small
-export FASTER_WHISPER_DEVICE=auto
-export FASTER_WHISPER_COMPUTE_TYPE=auto
+export FASTER_WHISPER_MODEL=large-v3
+export FASTER_WHISPER_DEVICE=cuda
+export FASTER_WHISPER_COMPUTE_TYPE=float16
 export WEB_ACCESS_PASSWORD=
 ```
 
 Windows PowerShell 示例：
 
 ```powershell
-$env:FASTER_WHISPER_MODEL="small"
-$env:FASTER_WHISPER_DEVICE="auto"
+$env:FASTER_WHISPER_MODEL="large-v3"
+$env:FASTER_WHISPER_DEVICE="cuda"
+$env:FASTER_WHISPER_COMPUTE_TYPE="float16"
 python app.py
 ```
 
@@ -57,12 +58,11 @@ python app.py
 ## 5. 说明
 
 - `LOCAL_UPLOAD_DIR` 是本地音频上传目录，相对路径会解析到 `backend/` 目录下。
-- CPU 转写建议使用 `FASTER_WHISPER_MODEL=small` 或 `base`。
-- CUDA 环境可尝试：
+- CPU 转写建议改用 `FASTER_WHISPER_MODEL=small` 或 `base`，并设置：
 
 ```bash
-export FASTER_WHISPER_DEVICE=cuda
-export FASTER_WHISPER_COMPUTE_TYPE=float16
+export FASTER_WHISPER_DEVICE=cpu
+export FASTER_WHISPER_COMPUTE_TYPE=int8
 ```
 
 - 如果 Codex CLI 调用超时，可在前端“生成设置”里调大超时时间。
