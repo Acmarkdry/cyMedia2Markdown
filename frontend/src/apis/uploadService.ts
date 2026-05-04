@@ -1,5 +1,5 @@
 import httpService from './http'
-import { APIResponse, UploadUrlResponse } from './types'
+import { APIResponse, UploadUrlResponse, MediaFromUrlResponse, VideoScreenshotResponse } from './types'
 
 /**
  * 获取音频文件上传链接
@@ -46,6 +46,56 @@ export const uploadFile = async (
     return { success: true }
   } catch (error) {
     console.error('文件上传失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 根据视频 URL 下载视频并抽取本地音频。
+ */
+export const extractMediaFromUrl = async (url: string): Promise<MediaFromUrlResponse> => {
+  try {
+    const response = await httpService.request<APIResponse<MediaFromUrlResponse>>({
+      url: '/api/v1/files/media-from-url',
+      method: 'POST',
+      data: { url }
+    })
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message || '视频链接提取失败')
+    }
+
+    return response.data
+  } catch (error) {
+    console.error('视频链接提取失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 从后端已下载的视频中按秒截图。
+ */
+export const captureVideoScreenshot = async (
+  filename: string,
+  timeSeconds: number
+): Promise<VideoScreenshotResponse> => {
+  try {
+    const response = await httpService.request<APIResponse<VideoScreenshotResponse>>({
+      url: '/api/v1/files/video-screenshots',
+      method: 'POST',
+      data: {
+        filename,
+        time_seconds: timeSeconds
+      }
+    })
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message || '视频截图失败')
+    }
+
+    return response.data
+  } catch (error) {
+    console.error('视频截图失败:', error)
     throw error
   }
 }

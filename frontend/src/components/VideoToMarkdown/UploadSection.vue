@@ -18,6 +18,7 @@ const props = defineProps({
     default: '上传视频或Mp3音频'
   },
   file: Object,
+  mediaUrl: String,
   fileName: String,
   fileSize: Number,
   fileMd5: String,
@@ -42,7 +43,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['file-selected', 'update:style', 'update:remarks', 'update:timeout', 'update:maxTokens', 'start-process', 'reset'])
+const emit = defineEmits(['file-selected', 'url-selected', 'update:style', 'update:remarks', 'update:timeout', 'update:maxTokens', 'start-process', 'reset'])
 
 const allowedTypes = [
   'video/mp4',
@@ -78,6 +79,20 @@ const handleFileChange = (file) => {
     return false
   }
   emit('file-selected', file.raw)
+}
+
+const localMediaUrl = ref('')
+const handleUrlSubmit = () => {
+  const url = localMediaUrl.value.trim()
+  if (!url) {
+    ElMessage.warning('请输入 B站视频链接')
+    return
+  }
+  if (!/^https?:\/\//.test(url)) {
+    ElMessage.error('请输入 http 或 https 开头的视频链接')
+    return
+  }
+  emit('url-selected', url)
 }
 
 // 支持风格类型及图标
@@ -128,10 +143,10 @@ const handleMaxTokensChange = (val) => {
     <div class="upload-section" :class="{ 'loading-state': ffmpegLoading }">
       <div class="welcome">
         <div class="welcome-title">你好，我是 <span class="ai-highlight">AI 图文创作助手</span></div>
-        <div class="welcome-desc">上传你的视频或MP3音频，我会帮你自动转写并生成多种风格的图文内容。</div>
+        <div class="welcome-desc">上传视频/MP3，或粘贴 B站视频链接，我会自动转写并按内容截图生成图文。</div>
       </div>
       <!-- 仅在未上传文件时显示风格支持列表和acceptHint -->
-      <div v-if="!props.file">
+      <div v-if="!props.file && !props.mediaUrl">
         <div class="style-support-list">
           <div class="style-support-item" v-for="item in styleList" :key="item.label">
             <img :src="item.icon" :alt="item.name" class="style-support-icon" />
@@ -146,7 +161,7 @@ const handleMaxTokensChange = (val) => {
         </h3>
       </div>
       <!-- 上传区域：仅在未上传文件时显示 -->
-      <el-upload v-if="!props.file" class="uploader" drag action="" :auto-upload="false" :on-change="handleFileChange"
+      <el-upload v-if="!props.file && !props.mediaUrl" class="uploader" drag action="" :auto-upload="false" :on-change="handleFileChange"
         :disabled="ffmpegLoading || isProcessing" :accept="allowedTypes.join(',') + ',.mp3'">
         <div class="upload-content">
           <div class="upload-icon-wrapper">
@@ -166,18 +181,30 @@ const handleMaxTokensChange = (val) => {
           </p>
         </div>
       </el-upload>
+      <div v-if="!props.file && !props.mediaUrl" class="url-input-card">
+        <div class="url-divider">或粘贴 B站视频链接</div>
+        <div class="url-input-row">
+          <el-input v-model="localMediaUrl" :disabled="isProcessing" placeholder="https://www.bilibili.com/video/..."
+            clearable @keyup.enter="handleUrlSubmit" />
+          <el-button class="url-submit-btn" :disabled="isProcessing" @click="handleUrlSubmit">使用链接</el-button>
+        </div>
+      </div>
       <!-- 文件信息和风格选择：上传后显示 -->
-      <div v-else class="file-info-section">
+      <div v-if="props.file || props.mediaUrl" class="file-info-section">
         <div class="file-info-card">
           <div class="file-info-row">
-            <span class="file-info-label">文件名：</span>
+            <span class="file-info-label">{{ props.mediaUrl ? '视频：' : '文件名：' }}</span>
             <span class="file-info-value">{{ props.fileName }}</span>
           </div>
-          <div class="file-info-row">
+          <div v-if="props.file" class="file-info-row">
             <span class="file-info-label">文件大小：</span>
             <span class="file-info-value">{{ (props.fileSize / 1024 / 1024).toFixed(2) }} MB</span>
           </div>
-          <div class="file-info-row">
+          <div v-if="props.mediaUrl" class="file-info-row">
+            <span class="file-info-label">链接：</span>
+            <span class="file-info-value">{{ props.mediaUrl }}</span>
+          </div>
+          <div v-if="props.file" class="file-info-row">
             <span class="file-info-label">文件MD5：</span>
             <span class="file-info-value file-info-md5">
               <template v-if="props.md5Calculating">
@@ -675,6 +702,32 @@ const handleMaxTokensChange = (val) => {
 
 :deep(.el-upload-list) {
   color: #23272f !important;
+}
+
+.url-input-card {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.url-divider {
+  color: #6b7280;
+  font-size: 0.98rem;
+  text-align: center;
+  margin: 0.4rem 0 0.8rem;
+}
+
+.url-input-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.url-submit-btn {
+  background: #23272f !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  white-space: nowrap;
 }
 
 :deep(.el-radio-button__inner) {

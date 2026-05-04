@@ -7,14 +7,14 @@ import { loadFFmpeg, extractAudio, captureVideoFrame, frameToBase64, cleanupVide
 import { submitAsrTask, pollAsrTask } from '../../apis/asrService'
 import { generateMarkdownText } from '../../apis/markdownService'
 import { calculateMD5 } from '../../utils/md5'
-import { getAudioUploadUrl, uploadFile } from '../../apis'
+import { getAudioUploadUrl, uploadFile, extractMediaFromUrl, captureVideoScreenshot } from '../../apis'
 import { saveTask, checkTaskExistsByMd5AndStyle, getAnyTaskByMd5, getTaskByID } from '../../utils/db'
 import { eventBus } from '../../utils/eventBus'
 
 const stepDefs = [
   { title: '初始化 FFmpeg', icon: 'Promotion', status: 'wait' },
   { title: '提取音频', icon: 'Headset', status: 'wait' },
-  { title: '上传文件', icon: 'Upload', status: 'wait' },
+  { title: '准备媒体', icon: 'Upload', status: 'wait' },
   { title: '音频转文字', icon: 'Document', status: 'wait' },
   { title: '生成图文', icon: 'Document', status: 'wait' }
 ]
@@ -27,6 +27,8 @@ const ffmpegLoaded = ref(false)
 const isProcessing = ref(false)
 
 const file = ref(null)
+const mediaUrl = ref('')
+const remoteVideoFilename = ref('')
 const fileName = ref('')
 const showStyleSelector = ref(false)
 const style = ref('')
@@ -58,6 +60,8 @@ const resetAll = () => {
   activeStep.value = 0
   isProcessing.value = false
   file.value = null
+  mediaUrl.value = ''
+  remoteVideoFilename.value = ''
   fileName.value = ''
   showStyleSelector.value = false
   style.value = ''
@@ -81,6 +85,15 @@ const handleFileSelected = async (f) => {
   // 计算MD5
   fileMd5.value = await calculateMD5(new Uint8Array(await f.arrayBuffer()))
   md5Calculating.value = false
+  showStyleSelector.value = true
+}
+
+const handleUrlSelected = async (url) => {
+  resetAll()
+  mediaUrl.value = url
+  fileName.value = url
+  fileSize.value = 0
+  fileMd5.value = ''
   showStyleSelector.value = true
 }
 
@@ -110,33 +123,49 @@ const updateStepStatus = (idx, status) => {
 const isMP3File = (f) => f && (f.type === 'audio/mpeg' || f.name.toLowerCase().endsWith('.mp3'))
 
 const startProcessing = async () => {
-  if (!file.value || !style.value) return
+  if ((!file.value && !mediaUrl.value) || !style.value) return
   isProcessing.value = true
   steps.value = stepDefs.map(s => ({ ...s }))
   try {
-    // 0. 初始化FFmpeg
-    updateStepStatus(0, 'processing')
-    ffmpegLoading.value = true
-    await loadFFmpeg()
-    ffmpegLoaded.value = true
-    updateStepStatus(0, 'success')
-    ffmpegLoading.value = false
-
-    // 1. 提取音频
-    updateStepStatus(1, 'processing')
     let audioBuf
-    if (isMP3File(file.value)) {
-      audioBuf = new Uint8Array(await file.value.arrayBuffer())
-      ElMessage.success('检测到MP3文件，跳过音频提取')
-    } else {
-      audioBuf = await extractAudio(new Uint8Array(await file.value.arrayBuffer()))
-    }
-    audioExtracted.value = true
-    updateStepStatus(1, 'success')
+    let audioMd5
 
-    // 2. 检查MD5和历史
-    const audioMd5 = await calculateMD5(audioBuf)
-    audioFilename.value = `${audioMd5}.mp3`
+    if (mediaUrl.value) {
+      updateStepStatus(0, 'success')
+      updateStepStatus(1, 'processing')
+      const mediaInfo = await extractMediaFromUrl(mediaUrl.value)
+      audioFilename.value = mediaInfo.audio_filename
+      remoteVideoFilename.value = mediaInfo.video_filename
+      fileName.value = mediaInfo.title || mediaUrl.value
+      audioMd5 = `url-${mediaInfo.url_hash}`
+      audioExtracted.value = true
+      updateStepStatus(1, 'success')
+      updateStepStatus(2, 'success')
+    } else {
+      // 0. 初始化FFmpeg
+      updateStepStatus(0, 'processing')
+      ffmpegLoading.value = true
+      await loadFFmpeg()
+      ffmpegLoaded.value = true
+      updateStepStatus(0, 'success')
+      ffmpegLoading.value = false
+
+      // 1. 提取音频
+      updateStepStatus(1, 'processing')
+      if (isMP3File(file.value)) {
+        audioBuf = new Uint8Array(await file.value.arrayBuffer())
+        ElMessage.success('检测到MP3文件，跳过音频提取')
+      } else {
+        audioBuf = await extractAudio(new Uint8Array(await file.value.arrayBuffer()))
+      }
+      audioExtracted.value = true
+      updateStepStatus(1, 'success')
+
+      // 2. 检查MD5和历史
+      audioMd5 = await calculateMD5(audioBuf)
+      audioFilename.value = `${audioMd5}.mp3`
+    }
+
     const exists = await checkTaskExistsByMd5AndStyle(audioMd5, style.value)
     if (exists) {
       updateStepStatus(2, 'error')
@@ -153,11 +182,13 @@ const startProcessing = async () => {
       textTranscribed.value = true
       updateStepStatus(3, 'success')
     } else {
-      // 全新的任务才需要上传和识别
-      updateStepStatus(2, 'processing')
-      const uploadUrl = await getAudioUploadUrl(audioFilename.value)
-      await uploadFile(uploadUrl, new Blob([audioBuf], { type: 'audio/mpeg' }))
-      updateStepStatus(2, 'success')
+      if (!mediaUrl.value) {
+        // 全新的本地文件任务才需要上传和识别
+        updateStepStatus(2, 'processing')
+        const uploadUrl = await getAudioUploadUrl(audioFilename.value)
+        await uploadFile(uploadUrl, new Blob([audioBuf], { type: 'audio/mpeg' }))
+        updateStepStatus(2, 'success')
+      }
 
       updateStepStatus(3, 'processing')
       const taskId = await submitAsrTask(audioFilename.value)
@@ -194,7 +225,7 @@ const startProcessing = async () => {
     const imageTimeMarkers = md.match(imageTimeRegex) || []
     console.log('提取到的时间戳标记:', imageTimeMarkers)
     // 新逻辑：根据开关处理截图
-    markdownContent.value = await processImageMarkers(md, file.value, imageTimeMarkers)
+    markdownContent.value = await processImageMarkers(md, file.value, imageTimeMarkers, remoteVideoFilename.value)
     cleanupVideoCache()
     updateStepStatus(4, 'success')
 
@@ -234,14 +265,14 @@ function isSmartScreenshotEnabled() {
 }
 
 // 抽离截图处理逻辑
-async function processImageMarkers(md, file, imageTimeMarkers) {
+async function processImageMarkers(md, file, imageTimeMarkers, remoteFilename = '') {
   // 去除掉 md 开头的 ```markdown 和 结尾的 ```
   if (md.startsWith('```markdown')) {
     md = md.replace(/^```markdown\s*/, '').replace(/```$/, '').trim()
   } else if (md.startsWith('```')) {
     md = md.replace(/^```/, '').replace(/```$/, '').trim()
   }
-  smartScreenshot.value = isSmartScreenshotEnabled()
+  smartScreenshot.value = remoteFilename ? true : isSmartScreenshotEnabled()
   imageCount.value = 0
   imageTotal.value = imageTimeMarkers.length
   if (!smartScreenshot.value) {
@@ -255,6 +286,28 @@ async function processImageMarkers(md, file, imageTimeMarkers) {
     return result
   }
   // 已开启，执行截图逻辑
+  if (imageTimeMarkers.length > 0 && remoteFilename) {
+    let result = md
+    let imageIdx = 1
+    for (const marker of imageTimeMarkers) {
+      try {
+        const timeMatch = marker.match(/#image\[(\d+)\]/)
+        if (timeMatch) {
+          const totalSeconds = parseInt(timeMatch[1])
+          const screenshot = await captureVideoScreenshot(remoteFilename, totalSeconds)
+          const imageTag = `<div style="text-align:center;"><span style="font-size:0.98em;color:#888;">截图${imageIdx}</span><br><img src="${screenshot.data_url}" alt="截图${imageIdx}" style="max-width:100%;height:auto;border-radius:8px;box-shadow:0 2px 8px #0001;margin:8px 0;" /></div><p></p>`
+          result = result.replace(marker, imageTag)
+          imageCount.value = imageIdx
+          imageIdx++
+        }
+      } catch (error) {
+        console.warn(`跳过远程视频截图标记 ${marker}:`, error.message)
+        result = result.replace(marker, '')
+      }
+    }
+    imageCount.value = imageTotal.value
+    return result
+  }
   if (imageTimeMarkers.length > 0 && !isMP3File(file)) {
     const videoData = new Uint8Array(await file.arrayBuffer())
     let result = md
@@ -313,8 +366,8 @@ const stepText = computed(() => steps.value[activeStep.value]?.title || '')
       <!-- 步骤1：上传/风格选择/文件信息，始终显示，除非正在处理或有结果 -->
       <div v-if="!isProcessing && !markdownContent" class="component-wrapper">
         <UploadSection :ffmpeg-loading="ffmpegLoading" :is-processing="isProcessing" :file="file" :file-name="fileName"
-          :file-size="fileSize" :file-md5="fileMd5" :md5-calculating="md5Calculating" :style="style"
-          @file-selected="handleFileSelected" @update:style="handleStyleSelected" @start-process="startProcessing"
+          :media-url="mediaUrl" :file-size="fileSize" :file-md5="fileMd5" :md5-calculating="md5Calculating" :style="style"
+          @file-selected="handleFileSelected" @url-selected="handleUrlSelected" @update:style="handleStyleSelected" @start-process="startProcessing"
           :remarks="remarks" @update:remarks="handleRemarksUpdate" @reset="resetAll"
           @update:timeout="handleLLMTimeoutChange" @update:max-tokens="handleLLMMaxTokensChange" />
       </div>

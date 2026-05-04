@@ -50,6 +50,22 @@ export interface UploadUrlResponse {
   upload_url: string;
 }
 
+export interface MediaFromUrlResponse {
+  media_id: string;
+  url_hash: string;
+  title: string;
+  source_url: string;
+  audio_filename: string;
+  video_filename: string;
+  duration: number | null;
+}
+
+export interface VideoScreenshotResponse {
+  time_seconds: number;
+  filename: string;
+  data_url: string;
+}
+
 /**
  * ASR任务提交响应
  */
@@ -127,6 +143,9 @@ export interface SecretsData {
   CODEX_CLI_MODEL: string | null;
   CODEX_CLI_REASONING_EFFORT: string | null;
   LOCAL_UPLOAD_DIR: string | null;
+  LOCAL_MEDIA_DIR: string | null;
+  LOCAL_SCREENSHOT_DIR: string | null;
+  YTDLP_COOKIES_FILE: string | null;
   ASR_PROVIDER: string | null;
   ASR_LANGUAGE: string | null;
   FASTER_WHISPER_MODEL: string | null;

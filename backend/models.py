@@ -21,6 +21,15 @@ class FileNameRequest(BaseModel):
     filename: str
 
 
+class MediaUrlRequest(BaseModel):
+    url: str
+
+
+class VideoScreenshotRequest(BaseModel):
+    filename: str
+    time_seconds: int
+
+
 class EnvResponse(BaseModel):
     code: int = 200
     success: bool = True

@@ -4,6 +4,7 @@
 
 - 大模型生成：调用本机 `codex exec`，复用 Codex CLI 登录态，不需要 OpenAI/方舟 API Key。
 - 音频转写：前端抽出的音频上传到本机后端目录，再由 `faster-whisper` 本地转写，不需要火山 AUC、TOS/S3。
+- B站/公开视频链接：后端通过 `yt-dlp` 下载视频，抽取音频用于转写，并用本地 ffmpeg 按 `#image[]` 时间点截帧。
 
 ## 1. 前置要求
 
@@ -30,6 +31,9 @@ export CODEX_CLI_PATH=codex
 export CODEX_CLI_MODEL=gpt-5.5
 export CODEX_CLI_REASONING_EFFORT=xhigh
 export LOCAL_UPLOAD_DIR=local_storage/uploads
+export LOCAL_MEDIA_DIR=local_storage/media
+export LOCAL_SCREENSHOT_DIR=local_storage/screenshots
+export YTDLP_COOKIES_FILE=
 export ASR_PROVIDER=faster-whisper
 export ASR_LANGUAGE=auto
 export FASTER_WHISPER_MODEL=large-v3
@@ -58,6 +62,8 @@ python app.py
 ## 5. 说明
 
 - `LOCAL_UPLOAD_DIR` 是本地音频上传目录，相对路径会解析到 `backend/` 目录下。
+- `LOCAL_MEDIA_DIR` 是 URL 视频下载目录，`LOCAL_SCREENSHOT_DIR` 是 URL 视频截帧缓存目录。
+- 如果 B站视频需要登录态，导出浏览器 cookies.txt 后把路径填到 `YTDLP_COOKIES_FILE`。
 - CPU 转写建议改用 `FASTER_WHISPER_MODEL=small` 或 `base`，并设置：
 
 ```bash
