@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
+from contextlib import contextmanager
 import json
 import re
 import shutil
@@ -44,6 +45,16 @@ VIDEOS = [
         "title": "[UnrealCircle]《Lyra初学者游戏包工程解读》 | quabqi",
         "url": "https://www.bilibili.com/video/BV1Ce4y1X7k5/",
     },
+    {
+        "slug": "BV1X5411V7jh",
+        "title": "[中文直播]第31期｜GAS插件介绍（入门篇） | 伍德 大钊",
+        "url": "https://www.bilibili.com/video/BV1X5411V7jh/",
+    },
+    {
+        "slug": "BV1zD4y1X77M",
+        "title": "[UnrealOpenDay2020]深入GAS架构设计 | EpicGames 大钊",
+        "url": "https://www.bilibili.com/video/BV1zD4y1X77M/",
+    },
 ]
 
 
@@ -62,6 +73,74 @@ def post_json(url: str, data: dict, timeout: int = 60) -> dict:
 def get_json(url: str, timeout: int = 60) -> dict:
     with urlopen(url, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def find_transcription_task(filename: str) -> dict | None:
+    tasks_payload = get_json(f"{API_BASE}/audio/transcription-tasks", timeout=30)
+    tasks = tasks_payload.get("data", {}).get("tasks", [])
+    matches = [
+        task
+        for task in tasks
+        if task.get("filename") == filename and task.get("status") in {"running", "finished"}
+    ]
+    if not matches:
+        return None
+    return sorted(matches, key=lambda task: task.get("created_at") or 0)[-1]
+
+
+def wait_for_transcription_task(task_id: str, video_slug: str, poll_interval: int) -> list[dict]:
+    while True:
+        task_payload = get_json(f"{API_BASE}/audio/transcription-tasks/{task_id}", timeout=30)
+        task_data = task_payload["data"]
+        print(
+            json.dumps(
+                {"stage": "asr", "slug": video_slug, "status": task_data["status"]},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        if task_data["status"] == "finished":
+            return task_data["result"]
+        if task_data["status"] == "failed":
+            raise RuntimeError(task_data.get("error") or "ASR failed")
+        time.sleep(poll_interval)
+
+
+@contextmanager
+def asr_lock(root: Path, video_slug: str, poll_interval: int):
+    lock_dir = root / "output" / ".asr_gpu.lock"
+    while True:
+        try:
+            lock_dir.mkdir(parents=True)
+            (lock_dir / "owner.txt").write_text(video_slug, encoding="utf-8")
+            print(
+                json.dumps({"stage": "asr-lock", "slug": video_slug, "status": "acquired"}, ensure_ascii=False),
+                flush=True,
+            )
+            break
+        except FileExistsError:
+            owner_path = lock_dir / "owner.txt"
+            owner = owner_path.read_text(encoding="utf-8").strip() if owner_path.exists() else "unknown"
+            print(
+                json.dumps(
+                    {"stage": "asr-lock", "slug": video_slug, "status": "waiting", "owner": owner},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            time.sleep(poll_interval)
+    try:
+        yield
+    finally:
+        try:
+            (lock_dir / "owner.txt").unlink(missing_ok=True)
+            lock_dir.rmdir()
+        except OSError:
+            pass
+        print(
+            json.dumps({"stage": "asr-lock", "slug": video_slug, "status": "released"}, ensure_ascii=False),
+            flush=True,
+        )
 
 
 def fmt_time(ms: int) -> str:
@@ -104,7 +183,45 @@ def write_transcripts(out_dir: Path, segments: list[dict]):
     (out_dir / "transcript.srt").write_text("\n".join(lines), encoding="utf-8")
 
 
+def format_duration(seconds: int) -> str:
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def density_targets(segments: list[dict]) -> dict:
+    duration_seconds = max(1, int((segments[-1]["end_time"] - segments[0]["start_time"]) / 1000))
+    duration_minutes = duration_seconds / 60
+    if duration_minutes <= 30:
+        screenshots = "6-10"
+        chapters = "5-8"
+        note_chars = "8000-12000"
+    elif duration_minutes <= 60:
+        screenshots = "10-16"
+        chapters = "8-12"
+        note_chars = "14000-22000"
+    elif duration_minutes <= 120:
+        screenshots = "16-26"
+        chapters = "12-20"
+        note_chars = "28000-45000"
+    else:
+        screenshots = "24-36"
+        chapters = "18-28"
+        note_chars = "42000-65000"
+    return {
+        "duration_seconds": duration_seconds,
+        "duration_text": format_duration(duration_seconds),
+        "screenshots": screenshots,
+        "chapters": chapters,
+        "note_chars": note_chars,
+    }
+
+
 def build_prompt(video: dict, segments: list[dict]) -> str:
+    targets = density_targets(segments)
     lines = []
     for seg in segments:
         start_s = seg["start_time"] // 1000
@@ -113,31 +230,43 @@ def build_prompt(video: dict, segments: list[dict]) -> str:
             f"[{fmt_time(seg['start_time'])}-{fmt_time(seg['end_time'])} seconds:{start_s}-{end_s}] {seg['text']}"
         )
     transcript = "\n".join(lines)
-    return f"""你是一个严谨的 Unreal Engine 技术学习笔记整理助手。
+    return f"""你是一位 Unreal Engine / 游戏技术课程的高密度知识整理专家。
 
 视频标题：{video['title']}
 来源：Bilibili {video['slug']}
-任务：根据下面带时间戳的转写稿，生成中文 Markdown 知识笔记。
+视频时长：约 {targets['duration_text']}
+任务：根据下面带时间戳的转写稿，生成中文 Markdown 深度学习笔记。目标是让读者不看原视频，也能复习主要技术内容、关键细节和实践方法。
 
 硬性要求：
-1. 输出中文 Markdown 正文，不要解释执行过程。
-2. 按主题组织，不要逐字翻译；保留关键概念、定义、系统结构、实践步骤、代码/蓝图工作流、调试方法、注意事项和结论。
-3. 每个主要章节标题后必须带时间范围，例如 `## 核心机制 [00:00-04:30]`。
-4. Unreal/Lyra/AbilitySystem/Animation/UI/Rendering 相关术语可保留英文，并补充中文解释。
-5. 插入 6-9 个截图标记。截图标记必须单独一行，且只能是 `#image[整数秒]`，例如 `#image[120]`。
-6. `#image[]` 中只能写阿拉伯数字，不能写中文、说明文字、冒号或单位。
-7. 秒数必须来自转写稿附近，选择适合看 PPT、架构图、编辑器操作、代码、蓝图或演示画面的时刻。
-8. 不要虚构没有出现的细节。ASR 可能有误，请结合 Unreal Engine 技术术语合理纠错。
+1. 只输出 Markdown 正文，不要解释执行过程。
+2. 默认输出中文；英文字幕需要翻译成自然中文。Unreal/Lyra/GAS/Common UI/Animation/Rendering 等专业术语保留英文，并在首次出现时补充中文解释。
+3. 内容完整优先于简短。不要只写结论，必须保留重要概念、系统关系、实现步骤、配置项、类名、函数名、蓝图节点、调试方法、示例、注意事项、适用场景和讲者强调的经验。
+4. 可以删除寒暄、重复口癖、直播互动闲聊和无技术含量内容，但不要删掉技术推导、操作流程和上下文原因。
+5. 标题层级只使用 `#`、`##`、`###`，不允许跳级；只使用一个 `#` 主标题。
+6. 每个 `##` 章节标题后必须带时间范围，例如 `## 核心机制 [00:00-04:30]`。每个 `###` 小节也尽量带时间范围。
+7. 时间范围必须基于字幕时间信息，格式为 `[mm:ss-mm:ss]` 或 `[hh:mm:ss-hh:mm:ss]`，00 小时时隐藏小时。
+8. 章节数量建议 {targets['chapters']} 个。每个主要章节至少包含 4-8 条高信息量要点；涉及流程、配置、代码、蓝图或系统结构时，必须拆成步骤。
+9. 目标笔记长度约 {targets['note_chars']} 个中文字符。不要把 30 分钟以上内容压缩成几个泛泛结论。
+10. 对关键概念尽量补充“为什么重要 / 适用场景 / 常见坑 / 和其他系统的关系”。
+11. 插入 {targets['screenshots']} 个截图标记。截图标记必须单独一行，且只能是 `#image[整数秒]`，例如 `#image[120]`。
+12. `#image[]` 中只能写阿拉伯数字，不能写中文、说明文字、冒号或单位。
+13. 秒数必须来自转写稿附近，选择适合看 PPT、架构图、编辑器操作、代码、蓝图、效果对比或演示画面的时刻。
+14. 不要虚构视频中没有的信息。ASR 可能有误，请结合 Unreal Engine 技术术语合理纠错，但不能编造不存在的 API 或流程。
 
-建议结构：
+建议输出结构：
 # 主标题
 ## 核心结论 [时间]
+- 用 6-12 条总结本视频最值得复习的内容。
 ## 主题章节 [时间]
 ### 子主题 [时间]
-- 要点
+- 背景与问题
+- 核心机制
+- 实现步骤或配置方法
+- 关键细节与注意事项
+## 易错点与调试建议
 ## 术语表
-## 实践建议
-## 总结
+## 实践清单
+## 复习问题
 
 转写稿：
 {transcript}
@@ -332,33 +461,45 @@ def process_video(root: Path, video: dict, args) -> dict:
             flush=True,
         )
     else:
-        task = post_json(
-            f"{API_BASE}/audio/transcription-tasks",
-            {"filename": media_data["audio_filename"]},
-            timeout=30,
-        )
-        task_id = task["data"]["task_id"]
-        status["task_id"] = task_id
-        while True:
-            time.sleep(args.poll_interval)
-            task_payload = get_json(f"{API_BASE}/audio/transcription-tasks/{task_id}", timeout=30)
-            task_data = task_payload["data"]
+        existing_task = None if args.force_asr else find_transcription_task(media_data["audio_filename"])
+        if existing_task:
+            task_id = existing_task["task_id"]
             print(
                 json.dumps(
-                    {"stage": "asr", "slug": video["slug"], "status": task_data["status"]},
+                    {
+                        "stage": "asr-existing",
+                        "slug": video["slug"],
+                        "task_id": task_id,
+                        "status": existing_task["status"],
+                    },
                     ensure_ascii=False,
                 ),
                 flush=True,
             )
-            if task_data["status"] == "finished":
-                segments = task_data["result"]
-                break
-            if task_data["status"] == "failed":
-                raise RuntimeError(task_data.get("error") or "ASR failed")
-        print(
-            json.dumps({"stage": "asr-save", "slug": video["slug"]}, ensure_ascii=False),
-            flush=True,
-        )
+        else:
+            with asr_lock(root, video["slug"], args.poll_interval):
+                task = post_json(
+                    f"{API_BASE}/audio/transcription-tasks",
+                    {"filename": media_data["audio_filename"]},
+                    timeout=30,
+                )
+                task_id = task["data"]["task_id"]
+                status["task_id"] = task_id
+                segments = wait_for_transcription_task(task_id, video["slug"], args.poll_interval)
+                print(
+                    json.dumps({"stage": "asr-save", "slug": video["slug"]}, ensure_ascii=False),
+                    flush=True,
+                )
+                write_transcripts(out_dir, segments)
+                segments = json.loads(transcript_path.read_text(encoding="utf-8"))
+                existing_task = {"task_id": task_id}
+        status["task_id"] = task_id
+        if existing_task and existing_task.get("task_id") == task_id and not transcript_path.exists():
+            segments = wait_for_transcription_task(task_id, video["slug"], args.poll_interval)
+            print(
+                json.dumps({"stage": "asr-save", "slug": video["slug"]}, ensure_ascii=False),
+                flush=True,
+            )
 
     write_transcripts(out_dir, segments)
     prompt = build_prompt(video, segments)
@@ -379,6 +520,11 @@ def process_video(root: Path, video: dict, args) -> dict:
             json.dumps({"stage": "codex-cache", "slug": video["slug"]}, ensure_ascii=False),
             flush=True,
         )
+    if args.force_codex:
+        screenshots_dir = out_dir / "screenshots"
+        if screenshots_dir.exists():
+            for image_path in screenshots_dir.glob("*.jpg"):
+                image_path.unlink()
     times = finalize_notes(root, out_dir, media_data["video_filename"], segments)
     render_html(out_dir)
     status["screenshots"] = times
@@ -402,7 +548,7 @@ def main():
     parser.add_argument("--start-at", help="Start at this BV slug")
     parser.add_argument("--poll-interval", type=int, default=30)
     parser.add_argument("--media-timeout", type=int, default=600)
-    parser.add_argument("--codex-timeout", type=int, default=900)
+    parser.add_argument("--codex-timeout", type=int, default=3600)
     parser.add_argument("--force-asr", action="store_true")
     parser.add_argument("--force-codex", action="store_true")
     args = parser.parse_args()
