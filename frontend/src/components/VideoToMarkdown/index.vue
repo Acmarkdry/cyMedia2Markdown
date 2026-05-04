@@ -139,6 +139,9 @@ const startProcessing = async () => {
       fileName.value = mediaInfo.title || mediaUrl.value
       audioMd5 = `url-${mediaInfo.url_hash}`
       audioExtracted.value = true
+      if (mediaInfo.cache_hit) {
+        ElMessage.success('检测到本地视频存档，已复用缓存')
+      }
       updateStepStatus(1, 'success')
       updateStepStatus(2, 'success')
     } else {

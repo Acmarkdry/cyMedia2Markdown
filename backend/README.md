@@ -33,6 +33,8 @@ export CODEX_CLI_REASONING_EFFORT=xhigh
 export LOCAL_UPLOAD_DIR=local_storage/uploads
 export LOCAL_MEDIA_DIR=local_storage/media
 export LOCAL_SCREENSHOT_DIR=local_storage/screenshots
+export LOG_DIR=local_storage/logs
+export LOCAL_VIDEO_ARCHIVE_DIRS=
 export YTDLP_COOKIES_FILE=
 export ASR_PROVIDER=faster-whisper
 export ASR_LANGUAGE=auto
@@ -63,6 +65,9 @@ python app.py
 
 - `LOCAL_UPLOAD_DIR` 是本地音频上传目录，相对路径会解析到 `backend/` 目录下。
 - `LOCAL_MEDIA_DIR` 是 URL 视频下载目录，`LOCAL_SCREENSHOT_DIR` 是 URL 视频截帧缓存目录。
+- URL 视频会写入 `_url_cache.json`，同一个链接再次处理会复用本地视频和音频。
+- `LOCAL_VIDEO_ARCHIVE_DIRS` 可配置额外本地视频存档目录，多个目录用英文分号分隔；URL 模式会尝试按视频 ID、标题和唯一时长匹配已有视频，匹配后只抽音频和截图，不重复下载。
+- `LOG_DIR` 是后端日志目录，默认会写入 `backend.log`，方便排查失败原因。
 - 如果 B站视频需要登录态，导出浏览器 cookies.txt 后把路径填到 `YTDLP_COOKIES_FILE`。
 - CPU 转写建议改用 `FASTER_WHISPER_MODEL=small` 或 `base`，并设置：
 

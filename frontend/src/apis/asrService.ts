@@ -52,7 +52,8 @@ export const queryAsrTask = async (taskId: string): Promise<AudioTaskResult> => 
     
     return {
       text,
-      status
+      status,
+      error: response.data?.error || null
     }
   } catch (error) {
     console.error('查询音频任务失败:', error)
@@ -102,7 +103,7 @@ export const pollAsrTask = async (
     }
     
     if (result.status === 'failed') {
-      throw new Error('音频识别失败')
+      throw new Error(result.error ? `音频识别失败: ${result.error}` : '音频识别失败')
     }
     
     await new Promise(resolve => setTimeout(resolve, interval))

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import os
 import site
 import threading
+import time
 import uuid
 
 from constants import AsrTaskStatus
@@ -77,6 +78,7 @@ def configure_cuda_dll_paths():
 
 
 def update_task(task_id: str, **fields):
+    fields["updated_at"] = time.time()
     with _TASK_LOCK:
         if task_id in _TASKS:
             _TASKS[task_id].update(fields)
@@ -197,12 +199,37 @@ async def create_transcription_task(
             "result": None,
             "error": None,
             "filename": safe_filename(request.filename),
+            "created_at": time.time(),
+            "updated_at": time.time(),
         }
 
     background_tasks.add_task(run_transcription_task, task_id, audio_path)
 
     return success_response(
         data={"task_id": task_id}, message="Transcription task created successfully"
+    )
+
+
+@router.get("/transcription-tasks", response_model=APIResponse)
+async def list_transcription_tasks():
+    """列出当前进程内的本地转写任务，便于调试失败原因。"""
+    with _TASK_LOCK:
+        tasks = [
+            {
+                "task_id": task_id,
+                "status": task["status"],
+                "filename": task.get("filename"),
+                "error": task.get("error"),
+                "created_at": task.get("created_at"),
+                "updated_at": task.get("updated_at"),
+                "result_count": len(task["result"]) if task.get("result") else 0,
+            }
+            for task_id, task in _TASKS.items()
+        ]
+
+    return success_response(
+        data={"tasks": tasks},
+        message="Transcription tasks retrieved",
     )
 
 
@@ -223,6 +250,7 @@ async def get_transcription_task(task_id: str):
             "status": task["status"],
             "result": task["result"],
             "error": task.get("error"),
+            "filename": task.get("filename"),
         },
         message="Transcription task status retrieved",
     )

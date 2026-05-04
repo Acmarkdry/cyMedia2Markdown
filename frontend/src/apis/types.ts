@@ -58,6 +58,8 @@ export interface MediaFromUrlResponse {
   audio_filename: string;
   video_filename: string;
   duration: number | null;
+  cache_hit?: boolean;
+  cache_source?: string;
 }
 
 export interface VideoScreenshotResponse {
@@ -83,6 +85,8 @@ export interface QueryASRTaskResponse {
     end_time: number;
     text: string;
   }> | null;
+  error: string | null;
+  filename?: string | null;
 }
 
 /**
@@ -96,6 +100,7 @@ export type TaskStatus = 'running' | 'finished' | 'failed';
 export interface AudioTaskResult {
   text: Array<Record<string, any>> | null;
   status: TaskStatus;
+  error: string | null;
 }
 
 /**
