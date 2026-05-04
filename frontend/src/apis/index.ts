@@ -8,7 +8,7 @@ import httpService from './http'
 
 // 从各个服务中导出常用函数
 export const { submitAsrTask, pollAsrTask: pollAudioTask, queryAsrTask } = audioService
-export const { generateMarkdownText } = markdownService
+export const { generateMarkdownText, generateVideoNotes } = markdownService
 export const { getAudioUploadUrl, uploadFile, extractMediaFromUrl, captureVideoScreenshot } = uploadService
 export const { sendChatMessage } = chatService
 export const { checkHealth } = healthService

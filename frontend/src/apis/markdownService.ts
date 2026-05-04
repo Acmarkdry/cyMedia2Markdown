@@ -87,3 +87,53 @@ export const generateMarkdownText = async (text: string, contentStyle: string, r
   }
 }
 
+type TranscriptSegmentPayload = { start_time: number; end_time: number; text: string; id?: number }
+
+export const generateVideoNotes = async (
+  transcript: Array<TranscriptSegmentPayload> | string,
+  title: string,
+  sourceUrl: string | undefined,
+  remarks: string,
+  timeout: number,
+  maxTokens: number
+): Promise<string> => {
+  try {
+    const transcriptPayload = Array.isArray(transcript)
+      ? { transcript_segments: transcript }
+      : { transcript_text: transcript }
+    const response = await httpService.request<APIResponse<ChatResponse & {
+      quality?: Record<string, any>;
+      chunked?: boolean;
+      chunk_count?: number;
+      retried?: boolean;
+    }>>({
+      url: '/api/v1/llm/video-notes',
+      method: 'POST',
+      data: {
+        title,
+        source_url: sourceUrl,
+        ...transcriptPayload,
+        remarks,
+        timeout,
+        max_tokens: maxTokens,
+        enable_chunking: true,
+        quality_retry: true,
+        chunk_minutes: 15
+      }
+    })
+
+    if (!response.success) {
+      throw new Error(response.error?.message || '生成视频学习笔记失败')
+    }
+
+    if (!response.data?.choices?.[0]?.message?.content) {
+      throw new Error('无效的响应格式')
+    }
+
+    return response.data.choices[0].message.content
+  } catch (error) {
+    console.error('生成视频学习笔记失败:', error)
+    throw error
+  }
+}
+

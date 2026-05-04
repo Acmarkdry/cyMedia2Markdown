@@ -60,6 +60,17 @@ export interface MediaFromUrlResponse {
   duration: number | null;
   cache_hit?: boolean;
   cache_source?: string;
+  transcript_source?: string;
+  subtitle_filename?: string;
+  subtitle_language?: string;
+  subtitle_source?: string;
+  transcript_segments?: Array<{
+    id?: number;
+    start_time: number;
+    end_time: number;
+    text: string;
+  }>;
+  transcript_segments_count?: number;
 }
 
 export interface VideoScreenshotResponse {

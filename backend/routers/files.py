@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Request
 import base64
 import hashlib
+import html
 import json
 import re
 import shutil
@@ -9,6 +10,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from urllib.request import Request as UrlRequest, urlopen
 from urllib.parse import quote
 
 from config.log import get_logger
@@ -23,6 +25,15 @@ logger = get_logger(__name__)
 VIDEO_SUFFIXES = {".mp4", ".mkv", ".webm", ".mov", ".avi"}
 URL_CACHE_FILENAME = "_url_cache.json"
 _URL_CACHE_LOCK = threading.Lock()
+SUBTITLE_PREFERRED_LANGS = [
+    "zh-Hans",
+    "zh-CN",
+    "zh",
+    "zh-Hant",
+    "zh-TW",
+    "en",
+]
+SUBTITLE_PREFERRED_EXTS = ["json3", "json", "vtt", "srt", "srv3", "ttml"]
 
 
 def get_upload_dir() -> Path:
@@ -153,7 +164,7 @@ def ensure_cached_entry_ready(entry: dict) -> bool:
 
 
 def response_from_entry(entry: dict, cache_hit: bool, cache_source: str) -> dict:
-    return {
+    response = {
         "media_id": entry["media_id"],
         "url_hash": entry["url_hash"],
         "title": entry.get("title") or "URL 视频",
@@ -164,6 +175,42 @@ def response_from_entry(entry: dict, cache_hit: bool, cache_source: str) -> dict
         "cache_hit": cache_hit,
         "cache_source": cache_source,
     }
+    subtitle_filename = entry.get("subtitle_filename")
+    if subtitle_filename:
+        subtitle_path = get_media_dir() / safe_filename(subtitle_filename)
+        if subtitle_path.exists():
+            try:
+                segments = json.loads(subtitle_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                logger.exception("Failed to read cached subtitle segments: %s", subtitle_path)
+                segments = None
+            if segments:
+                response.update(
+                    {
+                        "transcript_source": entry.get("transcript_source") or "subtitle",
+                        "subtitle_filename": subtitle_filename,
+                        "subtitle_language": entry.get("subtitle_language"),
+                        "subtitle_source": entry.get("subtitle_source"),
+                        "transcript_segments": segments,
+                        "transcript_segments_count": len(segments),
+                    }
+                )
+    return response
+
+
+def subtitle_segments_available(entry: dict) -> bool:
+    subtitle_filename = entry.get("subtitle_filename")
+    if not subtitle_filename:
+        return False
+    subtitle_path = get_media_dir() / safe_filename(subtitle_filename)
+    if not subtitle_path.exists():
+        return False
+    try:
+        segments = json.loads(subtitle_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.exception("Cached subtitle segments are not readable: %s", subtitle_path)
+        return False
+    return bool(segments)
 
 
 def get_ffmpeg_exe() -> str:
@@ -307,8 +354,9 @@ def build_cache_entry(
     video_path: Path,
     audio_filename: str,
     duration,
+    subtitle: dict | None = None,
 ) -> dict:
-    return {
+    entry = {
         "media_id": media_id,
         "url_hash": url_hash,
         "title": title,
@@ -319,6 +367,224 @@ def build_cache_entry(
         "created_at": time.time(),
         "updated_at": time.time(),
     }
+    if subtitle:
+        entry.update(
+            {
+                "subtitle_filename": subtitle.get("filename"),
+                "subtitle_language": subtitle.get("language"),
+                "subtitle_source": subtitle.get("source"),
+                "transcript_source": subtitle.get("transcript_source") or "official-subtitle",
+            }
+        )
+    return entry
+
+
+def clean_subtitle_text(text: str | None) -> str:
+    if not text:
+        return ""
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def parse_subtitle_time(value: str) -> int:
+    value = value.strip().replace(",", ".")
+    parts = value.split(":")
+    if len(parts) == 2:
+        hours = 0
+        minutes = int(parts[0])
+        seconds = float(parts[1])
+    elif len(parts) == 3:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = float(parts[2])
+    else:
+        raise ValueError(f"Invalid subtitle timestamp: {value}")
+    return int(round((hours * 3600 + minutes * 60 + seconds) * 1000))
+
+
+def parse_vtt_or_srt(content: str) -> list[dict]:
+    segments = []
+    lines = content.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    index = 0
+    current_id = 0
+    while index < len(lines):
+        line = lines[index].strip()
+        index += 1
+        if not line or line.upper().startswith("WEBVTT") or line.startswith("NOTE"):
+            continue
+        if "-->" not in line and index < len(lines) and "-->" in lines[index].strip():
+            line = lines[index].strip()
+            index += 1
+        if "-->" not in line:
+            continue
+        start_raw, end_raw = line.split("-->", 1)
+        end_raw = end_raw.strip().split()[0]
+        try:
+            start_ms = parse_subtitle_time(start_raw)
+            end_ms = parse_subtitle_time(end_raw)
+        except ValueError:
+            continue
+        text_lines = []
+        while index < len(lines) and lines[index].strip():
+            text_lines.append(lines[index].strip())
+            index += 1
+        text = clean_subtitle_text(" ".join(text_lines))
+        if text and end_ms > start_ms:
+            segments.append(
+                {
+                    "id": current_id,
+                    "start_time": start_ms,
+                    "end_time": end_ms,
+                    "text": text,
+                }
+            )
+            current_id += 1
+    return segments
+
+
+def parse_json_subtitle(content: str) -> list[dict]:
+    data = json.loads(content)
+    segments = []
+    current_id = 0
+
+    if isinstance(data, dict) and isinstance(data.get("body"), list):
+        for item in data["body"]:
+            text = clean_subtitle_text(item.get("content"))
+            start = item.get("from")
+            end = item.get("to")
+            if text and start is not None and end is not None:
+                segments.append(
+                    {
+                        "id": current_id,
+                        "start_time": int(round(float(start) * 1000)),
+                        "end_time": int(round(float(end) * 1000)),
+                        "text": text,
+                    }
+                )
+                current_id += 1
+        return segments
+
+    if isinstance(data, dict) and isinstance(data.get("events"), list):
+        for event in data["events"]:
+            if "segs" not in event:
+                continue
+            text = clean_subtitle_text("".join(seg.get("utf8", "") for seg in event.get("segs", [])))
+            start_ms = event.get("tStartMs")
+            duration_ms = event.get("dDurationMs")
+            if text and start_ms is not None:
+                end_ms = int(start_ms) + int(duration_ms or 2000)
+                segments.append(
+                    {
+                        "id": current_id,
+                        "start_time": int(start_ms),
+                        "end_time": end_ms,
+                        "text": text,
+                    }
+                )
+                current_id += 1
+        return segments
+
+    return segments
+
+
+def parse_subtitle_content(content: str, ext: str | None) -> list[dict]:
+    ext = (ext or "").lower()
+    if ext in {"json", "json3", "srv3"} or content.lstrip().startswith(("{", "[")):
+        try:
+            return parse_json_subtitle(content)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            logger.exception("Failed to parse JSON subtitle; trying VTT/SRT fallback")
+    return parse_vtt_or_srt(content)
+
+
+def subtitle_sort_key(language: str, track: dict, source: str) -> tuple[int, int, int]:
+    try:
+        lang_score = SUBTITLE_PREFERRED_LANGS.index(language)
+    except ValueError:
+        lang_score = len(SUBTITLE_PREFERRED_LANGS)
+    ext = (track.get("ext") or "").lower()
+    try:
+        ext_score = SUBTITLE_PREFERRED_EXTS.index(ext)
+    except ValueError:
+        ext_score = len(SUBTITLE_PREFERRED_EXTS)
+    source_score = 0 if source == "official" else 1
+    return (source_score, lang_score, ext_score)
+
+
+def iter_subtitle_candidates(info: dict):
+    candidates = []
+    for source, collection in (
+        ("official", info.get("subtitles") or {}),
+        ("automatic", info.get("automatic_captions") or {}),
+    ):
+        for language, tracks in collection.items():
+            for track in tracks or []:
+                if track.get("url"):
+                    candidates.append((language, track, source))
+    return sorted(candidates, key=lambda item: subtitle_sort_key(*item))
+
+
+def safe_subtitle_language(language: str | None) -> str:
+    language = language or "unknown"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", language)
+
+
+def download_subtitle_segments(info: dict, media_id: str) -> dict | None:
+    for language, track, source in iter_subtitle_candidates(info):
+        url = track.get("url")
+        ext = (track.get("ext") or "json").lower()
+        try:
+            req = UrlRequest(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urlopen(req, timeout=60) as response:
+                content = response.read().decode("utf-8", errors="replace")
+            segments = parse_subtitle_content(content, ext)
+        except Exception:
+            logger.exception("Failed to download or parse subtitle language=%s source=%s", language, source)
+            continue
+        if not segments:
+            continue
+        filename = f"{media_id}.subtitle.{safe_subtitle_language(language)}.json"
+        subtitle_path = get_media_dir() / filename
+        subtitle_path.write_text(
+            json.dumps(segments, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(
+            "Downloaded subtitle segments language=%s source=%s count=%s file=%s",
+            language,
+            source,
+            len(segments),
+            filename,
+        )
+        return {
+            "filename": filename,
+            "language": language,
+            "source": source,
+            "segments_count": len(segments),
+            "transcript_source": "official-subtitle" if source == "official" else "automatic-subtitle",
+        }
+    return None
+
+
+def enrich_entry_with_subtitles(entry: dict, info: dict) -> dict:
+    if subtitle_segments_available(entry):
+        return entry
+    subtitle = download_subtitle_segments(info, entry["media_id"])
+    if not subtitle:
+        return entry
+    entry = dict(entry)
+    entry.update(
+        {
+            "subtitle_filename": subtitle.get("filename"),
+            "subtitle_language": subtitle.get("language"),
+            "subtitle_source": subtitle.get("source"),
+            "transcript_source": subtitle.get("transcript_source"),
+            "updated_at": time.time(),
+        }
+    )
+    return entry
 
 
 def extract_audio_from_video(video_path: Path, audio_path: Path):
@@ -358,8 +624,13 @@ def download_video_from_url(url: str):
     with _URL_CACHE_LOCK:
         cached_entry = get_cached_entry(read_url_cache(), url_aliases)
     if cached_entry and ensure_cached_entry_ready(cached_entry):
-        logger.info("Reusing URL media cache url_hash=%s", url_hash)
-        return response_from_entry(cached_entry, cache_hit=True, cache_source="url-cache")
+        if not cached_entry.get("subtitle_filename") or subtitle_segments_available(cached_entry):
+            logger.info("Reusing URL media cache url_hash=%s", url_hash)
+            return response_from_entry(cached_entry, cache_hit=True, cache_source="url-cache")
+        logger.info("Cached subtitle metadata is stale; will try to refresh subtitles url_hash=%s", url_hash)
+        stale_cached_entry = cached_entry
+    else:
+        stale_cached_entry = None
 
     media_id = url_hash
     media_dir = get_media_dir()
@@ -382,6 +653,9 @@ def download_video_from_url(url: str):
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as exc:
+        if stale_cached_entry:
+            logger.exception("Failed to refresh URL metadata; reusing cached media without subtitles")
+            return response_from_entry(stale_cached_entry, cache_hit=True, cache_source="url-cache-stale-subtitle")
         raise BusinessException(f"视频链接解析失败: {exc}") from exc
 
     title = info.get("title") or "URL 视频"
@@ -390,6 +664,10 @@ def download_video_from_url(url: str):
     with _URL_CACHE_LOCK:
         cached_entry = get_cached_entry(read_url_cache(), aliases)
     if cached_entry and ensure_cached_entry_ready(cached_entry):
+        enriched_entry = enrich_entry_with_subtitles(cached_entry, info)
+        if enriched_entry != cached_entry:
+            save_cached_entry(enriched_entry, aliases)
+            cached_entry = enriched_entry
         logger.info(
             "Reusing URL media cache by source metadata url_hash=%s title=%s",
             url_hash,
@@ -405,6 +683,7 @@ def download_video_from_url(url: str):
         audio_path = get_upload_dir() / audio_filename
         if not audio_path.exists():
             extract_audio_from_video(video_path, audio_path)
+        subtitle = download_subtitle_segments(info, media_id)
 
         entry = build_cache_entry(
             url_hash=url_hash,
@@ -414,6 +693,7 @@ def download_video_from_url(url: str):
             video_path=video_path,
             audio_filename=audio_filename,
             duration=info.get("duration"),
+            subtitle=subtitle,
         )
         save_cached_entry(entry, aliases)
         logger.info(
@@ -435,6 +715,7 @@ def download_video_from_url(url: str):
         audio_path = get_upload_dir() / audio_filename
         if not audio_path.exists():
             extract_audio_from_video(video_path, audio_path)
+        subtitle = download_subtitle_segments(info, media_id)
         entry = build_cache_entry(
             url_hash=url_hash,
             media_id=media_id,
@@ -443,6 +724,7 @@ def download_video_from_url(url: str):
             video_path=video_path,
             audio_filename=audio_filename,
             duration=info.get("duration"),
+            subtitle=subtitle,
         )
         save_cached_entry(entry, aliases)
         logger.info("Recovered deterministic URL media file video=%s", video_path.name)
@@ -467,6 +749,7 @@ def download_video_from_url(url: str):
     audio_filename = f"{media_id}.wav"
     audio_path = get_upload_dir() / audio_filename
     extract_audio_from_video(video_path, audio_path)
+    subtitle = download_subtitle_segments(info, media_id)
 
     title = info.get("title") or title
     entry = build_cache_entry(
@@ -477,6 +760,7 @@ def download_video_from_url(url: str):
         video_path=video_path,
         audio_filename=audio_filename,
         duration=info.get("duration"),
+        subtitle=subtitle,
     )
     save_cached_entry(entry, cache_aliases_for_info(url_hash, info))
     logger.info(

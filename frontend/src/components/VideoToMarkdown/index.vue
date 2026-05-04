@@ -5,7 +5,7 @@ import UploadSection from './UploadSection.vue'
 import LoadingOverlay from './LoadingOverlay.vue'
 import { loadFFmpeg, extractAudio, captureVideoFrame, frameToBase64, cleanupVideoCache } from '../../utils/ffmpeg'
 import { submitAsrTask, pollAsrTask } from '../../apis/asrService'
-import { generateMarkdownText } from '../../apis/markdownService'
+import { generateMarkdownText, generateVideoNotes } from '../../apis/markdownService'
 import { calculateMD5 } from '../../utils/md5'
 import { getAudioUploadUrl, uploadFile, extractMediaFromUrl, captureVideoScreenshot } from '../../apis'
 import { saveTask, checkTaskExistsByMd5AndStyle, getAnyTaskByMd5, getTaskByID } from '../../utils/db'
@@ -139,6 +139,11 @@ const startProcessing = async () => {
       fileName.value = mediaInfo.title || mediaUrl.value
       audioMd5 = `url-${mediaInfo.url_hash}`
       audioExtracted.value = true
+      if (Array.isArray(mediaInfo.transcript_segments) && mediaInfo.transcript_segments.length > 0) {
+        transcriptionText.value = mediaInfo.transcript_segments
+        textTranscribed.value = true
+        ElMessage.success(`检测到${mediaInfo.subtitle_source === 'automatic' ? '自动' : '官方'}字幕，已跳过本地 ASR`)
+      }
       if (mediaInfo.cache_hit) {
         ElMessage.success('检测到本地视频存档，已复用缓存')
       }
@@ -179,26 +184,30 @@ const startProcessing = async () => {
 
     // 4. 识别
     updateStepStatus(3, 'processing')
-    const existingTask = await getAnyTaskByMd5(audioMd5)
-    if (existingTask && existingTask.transcriptionText) {
-      transcriptionText.value = existingTask.transcriptionText
-      textTranscribed.value = true
+    if (textTranscribed.value) {
       updateStepStatus(3, 'success')
     } else {
-      if (!mediaUrl.value) {
-        // 全新的本地文件任务才需要上传和识别
-        updateStepStatus(2, 'processing')
-        const uploadUrl = await getAudioUploadUrl(audioFilename.value)
-        await uploadFile(uploadUrl, new Blob([audioBuf], { type: 'audio/mpeg' }))
-        updateStepStatus(2, 'success')
-      }
+      const existingTask = await getAnyTaskByMd5(audioMd5)
+      if (existingTask && existingTask.transcriptionText) {
+        transcriptionText.value = existingTask.transcriptionText
+        textTranscribed.value = true
+        updateStepStatus(3, 'success')
+      } else {
+        if (!mediaUrl.value) {
+          // 全新的本地文件任务才需要上传和识别
+          updateStepStatus(2, 'processing')
+          const uploadUrl = await getAudioUploadUrl(audioFilename.value)
+          await uploadFile(uploadUrl, new Blob([audioBuf], { type: 'audio/mpeg' }))
+          updateStepStatus(2, 'success')
+        }
 
-      updateStepStatus(3, 'processing')
-      const taskId = await submitAsrTask(audioFilename.value)
-      const text = await pollAsrTask(taskId)
-      transcriptionText.value = text
-      textTranscribed.value = true
-      updateStepStatus(3, 'success')
+        updateStepStatus(3, 'processing')
+        const taskId = await submitAsrTask(audioFilename.value)
+        const text = await pollAsrTask(taskId)
+        transcriptionText.value = text
+        textTranscribed.value = true
+        updateStepStatus(3, 'success')
+      }
     }
 
     // 5. 生成内容
@@ -222,7 +231,13 @@ const startProcessing = async () => {
     } else {
       processedText = transcriptionText.value
     }
-    const md = await generateMarkdownText(processedText, style.value, remarks.value, llmTimeout.value, llmMaxTokens.value)
+    const canUseBackendVideoNotes = style.value === 'note'
+    const videoNotesTranscript = Array.isArray(transcriptionText.value)
+      ? transcriptionText.value
+      : String(processedText || '')
+    const md = canUseBackendVideoNotes
+      ? await generateVideoNotes(videoNotesTranscript, fileName.value, mediaUrl.value, remarks.value, llmTimeout.value, llmMaxTokens.value)
+      : await generateMarkdownText(processedText, style.value, remarks.value, llmTimeout.value, llmMaxTokens.value)
     // 提取所有时间戳标记 #image[20] 格式（整数秒数）
     const imageTimeRegex = /#image\[(\d+)\]/g
     const imageTimeMarkers = md.match(imageTimeRegex) || []
