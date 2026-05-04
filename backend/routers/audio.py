@@ -2,6 +2,8 @@
 from fastapi import APIRouter, BackgroundTasks
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+import os
+import site
 import threading
 import uuid
 
@@ -20,6 +22,7 @@ _TASK_LOCK = threading.Lock()
 _MODEL_LOCK = threading.Lock()
 _WHISPER_MODEL = None
 _WHISPER_MODEL_KEY: Optional[Tuple[str, str, str]] = None
+_CUDA_DLL_PATHS_CONFIGURED = False
 
 
 def get_upload_dir() -> Path:
@@ -44,6 +47,35 @@ def get_audio_path(filename: str) -> Path:
     return path
 
 
+def configure_cuda_dll_paths():
+    """Allow CTranslate2 to find CUDA runtime DLLs installed as Python wheels."""
+    global _CUDA_DLL_PATHS_CONFIGURED
+    if _CUDA_DLL_PATHS_CONFIGURED or env.FASTER_WHISPER_DEVICE != "cuda":
+        return
+
+    candidate_dirs = []
+    for site_dir in site.getsitepackages():
+        nvidia_dir = Path(site_dir) / "nvidia"
+        candidate_dirs.extend(
+            [
+                nvidia_dir / "cublas" / "bin",
+                nvidia_dir / "cudnn" / "bin",
+                nvidia_dir / "cuda_nvrtc" / "bin",
+            ]
+        )
+
+    existing_dirs = [str(path) for path in candidate_dirs if path.exists()]
+    for path in existing_dirs:
+        if hasattr(os, "add_dll_directory"):
+            os.add_dll_directory(path)
+
+    if existing_dirs:
+        os.environ["PATH"] = os.pathsep.join(existing_dirs + [os.environ.get("PATH", "")])
+        logger.info("Configured CUDA DLL paths for faster-whisper")
+
+    _CUDA_DLL_PATHS_CONFIGURED = True
+
+
 def update_task(task_id: str, **fields):
     with _TASK_LOCK:
         if task_id in _TASKS:
@@ -63,6 +95,7 @@ def get_faster_whisper_model():
             return _WHISPER_MODEL
 
         try:
+            configure_cuda_dll_paths()
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise BusinessException(
