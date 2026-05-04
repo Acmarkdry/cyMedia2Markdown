@@ -14,7 +14,7 @@ export const sendChatMessage = async (messages: ChatMessage[]): Promise<ChatMess
       data: {
         messages,
         max_tokens: 8192,
-        timeout: 120,
+        timeout: 600,
       }
     })
     

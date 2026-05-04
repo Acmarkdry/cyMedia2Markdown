@@ -31,7 +31,7 @@ const fileName = ref('')
 const showStyleSelector = ref(false)
 const style = ref('')
 const remarks = ref('')
-const llmTimeout = ref(120)
+const llmTimeout = ref(600)
 const llmMaxTokens = ref(8192)
 
 const showStartButton = ref(false)

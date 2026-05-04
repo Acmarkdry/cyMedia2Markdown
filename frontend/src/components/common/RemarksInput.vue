@@ -22,7 +22,7 @@ const props = defineProps({
     },
     timeout: {
         type: Number,
-        default: 120
+        default: 600
     },
     maxTokens: {
         type: Number,

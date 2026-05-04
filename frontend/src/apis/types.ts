@@ -123,18 +123,15 @@ export interface HealthCheckResponse {
  * 说明: 部分值可能已做脱敏或为 null
  */
 export interface SecretsData {
-  LLM_BASE_URL: string | null;
-  LLM_MODEL_ID: string | null;
-  LLM_API_KEY: string | null;
-  LLM_MAX_TOKENS: number | null;
-  TOS_ACCESS_KEY: string | null;
-  TOS_SECRET_KEY: string | null;
-  TOS_ENDPOINT: string | null;
-  TOS_REGION: string | null;
-  TOS_BUCKET: string | null;
-  AUC_APP_ID: string | null;
-  AUC_ACCESS_TOKEN: string | null;
-  AUC_CLUSTER_ID: string | null;
+  CODEX_CLI_PATH: string | null;
+  CODEX_CLI_MODEL: string | null;
+  CODEX_CLI_REASONING_EFFORT: string | null;
+  LOCAL_UPLOAD_DIR: string | null;
+  ASR_PROVIDER: string | null;
+  ASR_LANGUAGE: string | null;
+  FASTER_WHISPER_MODEL: string | null;
+  FASTER_WHISPER_DEVICE: string | null;
+  FASTER_WHISPER_COMPUTE_TYPE: string | null;
   WEB_ACCESS_PASSWORD: string | null;
 }
 

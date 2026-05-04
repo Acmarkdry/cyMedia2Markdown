@@ -35,17 +35,15 @@ WORKDIR /app
 COPY --from=builder /.venv /.venv
 ADD ./ ./
 
-ENV MODEL_ID="xxx" \
-    LLM_API_KEY="xxx" \
-    STORAGE_ACCESS_KEY="xxx" \
-    STORAGE_SECRET_KEY="xxx" \
-    STORAGE_ENDPOINT="xxx" \
-    STORAGE_REGION="xxx" \
-    STORAGE_BUCKET="xxx" \
-    AUC_APP_ID="xxx" \
-    AUC_ACCESS_TOKEN="xxx" \
-    AUC_CLUSTER_ID="xxx" \
-    LLM_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
+ENV CODEX_CLI_PATH="codex" \
+    CODEX_CLI_MODEL="gpt-5.5" \
+    CODEX_CLI_REASONING_EFFORT="xhigh" \
+    LOCAL_UPLOAD_DIR="local_storage/uploads" \
+    ASR_PROVIDER="faster-whisper" \
+    ASR_LANGUAGE="auto" \
+    FASTER_WHISPER_MODEL="small" \
+    FASTER_WHISPER_DEVICE="auto" \
+    FASTER_WHISPER_COMPUTE_TYPE="auto"
 
 EXPOSE 8080
 

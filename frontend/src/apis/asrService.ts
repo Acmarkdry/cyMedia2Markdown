@@ -72,7 +72,7 @@ const getMaxPollingAttempts = (): number => {
       if (!isNaN(n) && n >= 10) return n
     }
   } catch { }
-  return 60 // 默认值
+  return 600 // 默认 30 分钟，适配本地 faster-whisper 转写
 }
 
 /**

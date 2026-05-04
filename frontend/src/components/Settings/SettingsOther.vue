@@ -39,7 +39,7 @@
                         :step="10" class="max-polling-attempts-input" controls-position="right" />
                 </div>
                 <div class="form-tip">
-                    <span class="other-tip">默认 60，范围 10~1000。用于音频转文字任务轮询。</span>
+                    <span class="other-tip">默认 600，范围 10~1000。用于本地音频转文字任务轮询。</span>
                 </div>
             </div>
             <transition name="fade-slide">
@@ -113,7 +113,7 @@ function getLocalMaxPollingAttempts() {
             if (!isNaN(n) && n >= 10) return n
         }
     } catch { }
-    return 60
+    return 600
 }
 function setLocalMaxPollingAttempts(val) {
     localStorage.setItem('maxPollingAttempts', String(val))

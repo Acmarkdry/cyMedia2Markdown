@@ -27,7 +27,7 @@ class HttpService {
   constructor(baseURL: string) {
     this.axiosInstance = axios.create({
       baseURL,
-      timeout: 240000,
+      timeout: 900000,
       headers: {
         'Content-Type': 'application/json'
       }
@@ -148,6 +148,14 @@ class HttpService {
       }
       
       xhr.open('PUT', url)
+      try {
+        const webAccessPassword = localStorage.getItem('webAccessPassword')
+        if (webAccessPassword) {
+          xhr.setRequestHeader('request-web-access-password', webAccessPassword)
+        }
+      } catch (error) {
+        console.warn('获取Web访问密码失败:', error)
+      }
       xhr.send(file)
     })
   }

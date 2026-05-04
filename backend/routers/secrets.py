@@ -24,11 +24,6 @@ async def get_environment_variables():
 
     # 明确指定需要打码的变量列表
     always_mask = [
-        "LLM_API_KEY",
-        "STORAGE_ACCESS_KEY",
-        "STORAGE_SECRET_KEY",
-        "AUC_APP_ID",
-        "AUC_ACCESS_TOKEN",
     ]
 
     for key, value in vars(env).items():
