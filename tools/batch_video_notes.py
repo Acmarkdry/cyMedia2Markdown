@@ -10,52 +10,10 @@ import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+from video_manifest import load_manifest, select_videos
+
 
 API_BASE = "http://127.0.0.1:8080/api/v1"
-
-
-VIDEOS = [
-    {
-        "slug": "BV1mT4y167Fm",
-        "title": "[技术演讲]Lyra跨平台UI开发(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1mT4y167Fm/",
-    },
-    {
-        "slug": "BV1we411N7qu",
-        "title": "[UOD2022]Lyra中AbilitySystem的应用 | Epic 陈宝康",
-        "url": "https://www.bilibili.com/video/BV1we411N7qu/",
-    },
-    {
-        "slug": "BV1hSW4zTEgQ",
-        "title": "[UFSH2025]《鸣潮》中的光线追踪: 用光线构建动漫风格开放世界 | 王鑫 库洛游戏《鸣潮》图形渲染组长",
-        "url": "https://www.bilibili.com/video/BV1hSW4zTEgQ/",
-    },
-    {
-        "slug": "BV1yG4y187y6",
-        "title": "[英文直播]分析Lyra中的动画(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1yG4y187y6/",
-    },
-    {
-        "slug": "BV1L94y197kh",
-        "title": "[英文直播]Lyra导览与问答(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1L94y197kh/",
-    },
-    {
-        "slug": "BV1Ce4y1X7k5",
-        "title": "[UnrealCircle]《Lyra初学者游戏包工程解读》 | quabqi",
-        "url": "https://www.bilibili.com/video/BV1Ce4y1X7k5/",
-    },
-    {
-        "slug": "BV1X5411V7jh",
-        "title": "[中文直播]第31期｜GAS插件介绍（入门篇） | 伍德 大钊",
-        "url": "https://www.bilibili.com/video/BV1X5411V7jh/",
-    },
-    {
-        "slug": "BV1zD4y1X77M",
-        "title": "[UnrealOpenDay2020]深入GAS架构设计 | EpicGames 大钊",
-        "url": "https://www.bilibili.com/video/BV1zD4y1X77M/",
-    },
-]
 
 
 def post_json(url: str, data: dict, timeout: int = 60) -> dict:
@@ -222,6 +180,7 @@ def density_targets(segments: list[dict]) -> dict:
 
 def build_prompt(video: dict, segments: list[dict]) -> str:
     targets = density_targets(segments)
+    source = video.get("url") or video.get("source_url") or video["slug"]
     lines = []
     for seg in segments:
         start_s = seg["start_time"] // 1000
@@ -233,7 +192,7 @@ def build_prompt(video: dict, segments: list[dict]) -> str:
     return f"""你是一位 Unreal Engine / 游戏技术课程的高密度知识整理专家。
 
 视频标题：{video['title']}
-来源：Bilibili {video['slug']}
+来源：{source}
 视频时长：约 {targets['duration_text']}
 任务：根据下面带时间戳的转写稿，生成中文 Markdown 深度学习笔记。目标是让读者不看原视频，也能复习主要技术内容、关键细节和实践方法。
 
@@ -552,8 +511,9 @@ def process_video(root: Path, video: dict, args) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", nargs="*", help="Only process these BV slugs")
-    parser.add_argument("--start-at", help="Start at this BV slug")
+    parser.add_argument("--manifest", required=True, type=Path, help="JSON/JSONL video manifest with slug, title, url")
+    parser.add_argument("--only", nargs="*", help="Only process these slugs")
+    parser.add_argument("--start-at", help="Start at this slug")
     parser.add_argument("--poll-interval", type=int, default=30)
     parser.add_argument("--media-timeout", type=int, default=600)
     parser.add_argument("--codex-timeout", type=int, default=3600)
@@ -567,13 +527,7 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
 
     root = Path(__file__).resolve().parents[1]
-    videos = VIDEOS
-    if args.only:
-        allowed = set(args.only)
-        videos = [video for video in videos if video["slug"] in allowed]
-    if args.start_at:
-        slugs = [video["slug"] for video in videos]
-        videos = videos[slugs.index(args.start_at) :]
+    videos = select_videos(load_manifest(args.manifest), args.only, args.start_at)
 
     all_status = []
     for video in videos:

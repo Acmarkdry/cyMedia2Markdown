@@ -99,9 +99,81 @@ FASTER_WHISPER_COMPUTE_TYPE=int8
 
 ## 批量处理脚本
 
-[tools/batch_video_notes.py](./tools/batch_video_notes.py) 是一个本地批处理辅助脚本，用于调用后端 URL 媒体接口、转写、生成笔记并渲染 HTML。它适合处理已确认有权学习、整理或引用的公开视频。
+批处理工具统一放在 [tools/](./tools/) 下，脚本本身不再写死具体视频链接或本地路径。批量视频清单用 JSON/JSONL manifest 提供，格式参考 [tools/video_manifest.sample.json](./tools/video_manifest.sample.json)：
 
-脚本会把结果写入 `output/`。该目录已被 `.gitignore` 排除，因为里面可能包含字幕、截图、笔记和其他来自第三方媒体的派生内容，不应默认提交到公开仓库。
+```json
+{
+  "videos": [
+    {
+      "slug": "BVxxxxxxxxxx",
+      "title": "课程或演讲标题",
+      "url": "https://www.bilibili.com/video/BVxxxxxxxxxx/"
+    }
+  ]
+}
+```
+
+`slug` 用作 `output/<slug>/` 目录名；B 站链接如果不写 `slug`，工具会尝试从 URL 自动提取 BV 号。建议把自己的清单放到 `output/` 或其他本地目录，不要把包含个人整理任务的 manifest 提交到仓库。
+
+### URL 到完整笔记
+
+[tools/batch_video_notes.py](./tools/batch_video_notes.py) 适合从 URL 开始完整处理：下载/复用媒体、抽音频、本地 ASR、Codex CLI 生成笔记、截帧并渲染 HTML。后端需要先在 `http://127.0.0.1:8080` 启动。
+
+```powershell
+tools\batch_video_notes.cmd --manifest output\my_videos.json
+tools\batch_video_notes.cmd --manifest output\my_videos.json --only BVxxxxxxxxxx
+tools\batch_video_notes.cmd --manifest output\my_videos.json --start-at BVxxxxxxxxxx
+```
+
+这个脚本默认顺序执行。ASR 会使用 GPU 锁避免多个转写任务抢同一张显卡；已经存在的 `transcript.json`、`notes_raw.md` 会被复用，除非传入 `--force-asr` 或 `--force-codex`。
+
+### 复用已下载视频重生成
+
+如果 `output/<slug>/status.json`、`transcript.json` 和本地媒体缓存已经存在，可以跳过下载和 ASR，直接重生成高密度笔记：
+
+```powershell
+backend\.venv\Scripts\python.exe tools\regenerate_video_notes_backend.py --manifest output\my_videos.json --only BVxxxxxxxxxx
+```
+
+这个入口走后端 `/api/v1/llm/video-notes`，适合验证 Web 后端真实工作流。
+
+### 并行重生成笔记
+
+[tools/launch_parallel_regeneration.py](./tools/launch_parallel_regeneration.py) 会直接调用 [tools/regenerate_video_notes_direct.py](./tools/regenerate_video_notes_direct.py)，绕过 HTTP，适合已有转写和本地视频缓存后并行跑多个 Codex CLI 任务。
+
+```powershell
+tools\parallel_regenerate.cmd --all-output --jobs 3
+tools\parallel_regenerate.cmd --manifest output\my_videos.json --jobs 3
+tools\parallel_regenerate.cmd --slug BVxxxxxxxxxx --slug BVyyyyyyyyyy --jobs 2
+```
+
+常用参数：
+
+```text
+--jobs 3                 并行 Codex CLI 数量，建议先从 2-3 开始
+--chunk-minutes 12       长视频分块分钟数
+--llm-timeout 3600       单个 Codex 调用超时时间
+--force-chunks           忽略 direct_chunks 缓存，重新生成分块笔记
+--no-quality-retry       关闭质量检查失败后的重试
+--no-clear-screenshots   保留已有截图
+--dry-run                只打印将要执行的任务，不启动 Codex
+--shutdown               全部任务完成后 3 分钟自动关机
+```
+
+每个子任务日志写入 `output/parallel_<slug>_<timestamp>.log`，汇总写入 `output/parallel_summary_<timestamp>.json`。
+
+### 重建截图和 HTML
+
+如果只改了截图引用、HTML 样式或截帧规则，不需要重跑 Codex，可以用：
+
+```powershell
+backend\.venv\Scripts\python.exe tools\rebuild_note_assets.py --refresh-screenshots
+backend\.venv\Scripts\python.exe tools\rebuild_note_assets.py BVxxxxxxxxxx
+```
+
+脚本会读取现有 `notes_raw.md`，重新生成 `notes.md`、`notes.html` 和截图引用。`--refresh-screenshots` 会删除并重新截取 `output/<slug>/screenshots/`。
+
+所有批处理结果都会写入 `output/`。该目录已被 `.gitignore` 排除，因为里面可能包含字幕、截图、笔记和其他来自第三方媒体的派生内容，不应默认提交到公开仓库。
 
 ## 版权与内容合规
 

@@ -1,0 +1,14 @@
+{
+  "videos": [
+    {
+      "slug": "BVxxxxxxxxxx",
+      "title": "课程或演讲标题",
+      "url": "https://www.bilibili.com/video/BVxxxxxxxxxx/"
+    },
+    {
+      "slug": "video-002",
+      "title": "第二个视频标题",
+      "url": "https://example.com/path/to/video.mp4"
+    }
+  ]
+}

@@ -15,63 +15,10 @@ from pathlib import Path
 from urllib.error import HTTPError
 
 from batch_video_notes import finalize_notes, post_json, render_html, write_transcripts
+from video_manifest import load_manifest, select_videos as select_manifest_videos
 
 
 API_BASE = "http://127.0.0.1:8080/api/v1"
-
-
-VIDEOS = [
-    {
-        "slug": "BV13D4y1v7xx",
-        "title": "[UOD2022]Mass框架相关技术演讲",
-        "url": "https://www.bilibili.com/video/BV13D4y1v7xx/",
-    },
-    {
-        "slug": "BV1nB4y1y7cX",
-        "title": "[技术演讲]在UE5中用Mass框架构建海量实体(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1nB4y1y7cX/",
-    },
-    {
-        "slug": "BV1mT4y167Fm",
-        "title": "[技术演讲]Lyra跨平台UI开发(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1mT4y167Fm/",
-    },
-    {
-        "slug": "BV1we411N7qu",
-        "title": "[UOD2022]Lyra中AbilitySystem的应用 | Epic 陈宝康",
-        "url": "https://www.bilibili.com/video/BV1we411N7qu/",
-    },
-    {
-        "slug": "BV1hSW4zTEgQ",
-        "title": "[UFSH2025]《鸣潮》中的光线追踪: 用光线构建动漫风格开放世界 | 王鑫 库洛游戏《鸣潮》图形渲染组长",
-        "url": "https://www.bilibili.com/video/BV1hSW4zTEgQ/",
-    },
-    {
-        "slug": "BV1yG4y187y6",
-        "title": "[英文直播]分析Lyra中的动画(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1yG4y187y6/",
-    },
-    {
-        "slug": "BV1L94y197kh",
-        "title": "[英文直播]Lyra导览与问答(官方字幕)",
-        "url": "https://www.bilibili.com/video/BV1L94y197kh/",
-    },
-    {
-        "slug": "BV1Ce4y1X7k5",
-        "title": "[UnrealCircle]《Lyra初学者游戏包工程解读》 | quabqi",
-        "url": "https://www.bilibili.com/video/BV1Ce4y1X7k5/",
-    },
-    {
-        "slug": "BV1X5411V7jh",
-        "title": "[中文直播]第31期｜GAS插件介绍（入门篇） | 伍德 大钊",
-        "url": "https://www.bilibili.com/video/BV1X5411V7jh/",
-    },
-    {
-        "slug": "BV1zD4y1X77M",
-        "title": "[UnrealOpenDay2020]深入GAS架构设计 | EpicGames 大钊",
-        "url": "https://www.bilibili.com/video/BV1zD4y1X77M/",
-    },
-]
 
 
 def log_event(event: dict):
@@ -217,23 +164,15 @@ def process_video(root: Path, video: dict, args) -> dict:
     return status
 
 
-def select_videos(args) -> list[dict]:
-    videos = list(VIDEOS)
-    if args.only:
-        allowed = set(args.only)
-        videos = [video for video in videos if video["slug"] in allowed]
-    if args.start_at:
-        slugs = [video["slug"] for video in videos]
-        if args.start_at not in slugs:
-            raise RuntimeError(f"Unknown --start-at slug: {args.start_at}")
-        videos = videos[slugs.index(args.start_at) :]
-    return videos
+def load_selected_videos(args) -> list[dict]:
+    return select_manifest_videos(load_manifest(args.manifest), args.only, args.start_at)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", nargs="*", help="Only process these BV slugs")
-    parser.add_argument("--start-at", help="Start at this BV slug")
+    parser.add_argument("--manifest", required=True, type=Path, help="JSON/JSONL video manifest with slug, title, url")
+    parser.add_argument("--only", nargs="*", help="Only process these slugs")
+    parser.add_argument("--start-at", help="Start at this slug")
     parser.add_argument("--media-timeout", type=int, default=900)
     parser.add_argument("--request-timeout", type=int, default=21600)
     parser.add_argument("--llm-timeout", type=int, default=3600)
@@ -252,7 +191,7 @@ def main() -> int:
 
     root = Path(__file__).resolve().parents[1]
     statuses = []
-    for video in select_videos(args):
+    for video in load_selected_videos(args):
         try:
             statuses.append(process_video(root, dict(video), args))
         except Exception as exc:

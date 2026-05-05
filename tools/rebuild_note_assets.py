@@ -75,7 +75,7 @@ def rebuild_one(out_dir: Path, refresh_screenshots: bool) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Rebuild generated note screenshots and HTML.")
-    parser.add_argument("slugs", nargs="*", help="Output slugs to rebuild, for example BV1mT4y167Fm.")
+    parser.add_argument("slugs", nargs="*", help="Output slugs to rebuild, for example BVxxxxxxxxxx.")
     parser.add_argument(
         "--refresh-screenshots",
         action="store_true",
