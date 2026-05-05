@@ -837,8 +837,6 @@ async def create_video_screenshot(request: VideoScreenshotRequest):
             str(video_path),
             "-frames:v",
             "1",
-            "-vf",
-            "scale=min(1280\\,iw):-2",
             "-q:v",
             "2",
             str(screenshot_path),

@@ -321,6 +321,18 @@ def fallback_marker_times(segments: list[dict], count: int) -> list[int]:
     return [int(start + span * (i + 1) / (count + 1)) for i in range(count)]
 
 
+def screenshot_alt_text(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours:
+        timestamp = f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    else:
+        timestamp = f"{minutes:02d}:{secs:02d}"
+    return f"视频截图 {timestamp}"
+
+
 def finalize_notes(root: Path, out_dir: Path, video_filename: str, segments: list[dict]):
     raw = (out_dir / "notes_raw.md").read_text(encoding="utf-8")
     markers = re.findall(r"^#image\[[^\]]+\]$", raw, flags=re.MULTILINE)
@@ -366,8 +378,6 @@ def finalize_notes(root: Path, out_dir: Path, video_filename: str, segments: lis
                 str(video_path),
                 "-frames:v",
                 "1",
-                "-vf",
-                "scale=min(1280\\,iw):-2",
                 "-q:v",
                 "2",
                 str(image_path),
@@ -378,9 +388,7 @@ def finalize_notes(root: Path, out_dir: Path, video_filename: str, segments: lis
                     "utf-8", errors="replace"
                 )
                 raise RuntimeError(f"ffmpeg screenshot failed at {seconds}s: {details}")
-        alt = marker.removeprefix("#image[").removesuffix("]")
-        if marker.startswith("@@AUTO_IMAGE_"):
-            alt = f"{seconds}s"
+        alt = screenshot_alt_text(seconds)
         result = result.replace(marker, f"![{alt}](screenshots/{image_name})", 1)
 
     (out_dir / "notes.md").write_text(result, encoding="utf-8")
@@ -401,7 +409,7 @@ def render_html(out_dir: Path):
   <title>视频知识笔记</title>
   <style>
     body {{ margin: 0; background: #f6f7f9; color: #222; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; line-height: 1.75; }}
-    main {{ max-width: 980px; margin: 0 auto; padding: 40px 22px 80px; background: #fff; }}
+    main {{ max-width: min(1440px, calc(100vw - 32px)); margin: 0 auto; padding: 40px 22px 80px; background: #fff; }}
     h1, h2, h3 {{ line-height: 1.35; }}
     h1 {{ font-size: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; }}
     h2 {{ margin-top: 36px; border-left: 4px solid #111827; padding-left: 12px; }}
