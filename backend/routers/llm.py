@@ -277,6 +277,8 @@ def build_merge_prompt(
 8. 最终文风必须是讲义式陈述。每个主要 `###` 小节先用自然段解释，不要把分块笔记直接合成项目符号清单。
 9. 列表只能用于流程、对比、术语表、实践清单、复习问题和少量核心结论。若分块笔记里大量使用列表，合并时要改写成连贯段落，并保留其中的技术细节。
 10. 合并时优先写清因果关系、设计动机、工程取舍和例子；不要只罗列“是什么”。
+11. 分块笔记里经常每块都有“核心结论 / 易错点与调试建议 / 术语表 / 实践清单 / 复习问题”等模板栏目，最终文档中这些栏目只能全局出现一次。不要把每个分块的同名栏目逐块复制粘贴。
+12. 如果同一个概念、流程、术语或注意事项在多个相邻分块中重复出现，请合并成一个主题小节，并扩大标题时间范围；不要用“第 1 块说过、第二块又说”的方式重复表达。
 {token_budget_line}
 {remarks_line}
 分块笔记：
@@ -363,6 +365,22 @@ def assess_markdown_quality(markdown: str, targets: dict) -> dict:
     )
     line_count = max(1, len(nonempty_lines))
     list_ratio = round(list_line_count / line_count, 3)
+    generic_headings = {
+        "核心结论",
+        "易错点与调试建议",
+        "术语表",
+        "实践清单",
+        "复习问题",
+    }
+    heading_counts: dict[str, int] = {}
+    for match in re.finditer(r"^#{2,3}\s+(.+)$", markdown, flags=re.MULTILINE):
+        heading = re.sub(r"\s*\[[^\]]+\]\s*$", "", match.group(1).strip())
+        heading_counts[heading] = heading_counts.get(heading, 0) + 1
+    repeated_template_headings = {
+        heading: count
+        for heading, count in heading_counts.items()
+        if heading in generic_headings and count >= 3
+    }
     problems = []
     if char_count < targets["min_chars"]:
         problems.append(f"正文偏短: {char_count} < {targets['min_chars']}")
@@ -376,6 +394,9 @@ def assess_markdown_quality(markdown: str, targets: dict) -> dict:
         problems.append(f"讲义式段落偏少: {prose_paragraphs} < {max(8, h2_count)}")
     if list_ratio > 0.52 and list_line_count > len(prose_lines):
         problems.append(f"列表占比偏高: {list_ratio}")
+    if repeated_template_headings:
+        examples = ", ".join(f"{heading}x{count}" for heading, count in repeated_template_headings.items())
+        problems.append(f"重复模板小节偏多: {examples}")
     return {
         "passed": not problems,
         "problems": problems,
@@ -386,6 +407,7 @@ def assess_markdown_quality(markdown: str, targets: dict) -> dict:
         "prose_paragraphs": prose_paragraphs,
         "list_lines": list_line_count,
         "list_ratio": list_ratio,
+        "repeated_template_headings": repeated_template_headings,
     }
 
 

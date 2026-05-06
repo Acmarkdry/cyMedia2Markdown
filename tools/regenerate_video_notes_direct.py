@@ -140,16 +140,67 @@ def chunk_cache_is_valid(note_path: Path, args) -> bool:
     return note_path.stat().st_mtime >= args.cache_after_epoch
 
 
-def normalize_chunk_note_for_assembly(note: str) -> str:
+RECURRING_ASSEMBLY_SECTION_ORDER = [
+    "核心结论",
+    "易错点与调试建议",
+    "术语表",
+    "实践清单",
+    "复习问题",
+]
+RECURRING_ASSEMBLY_SECTIONS = set(RECURRING_ASSEMBLY_SECTION_ORDER)
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+TIME_SUFFIX_RE = re.compile(r"\s*\[[^\]]+\]\s*$")
+
+
+def normalize_heading_title(title: str) -> str:
+    return TIME_SUFFIX_RE.sub("", title.strip()).strip()
+
+
+def is_recurring_container_heading(title: str) -> bool:
+    return sum(1 for section in RECURRING_ASSEMBLY_SECTIONS if section in title) >= 2
+
+
+def add_recurring_line(recurring_sections: dict[str, list[str]], section: str, line: str) -> None:
+    value = line.strip()
+    if not value or value.startswith("#image["):
+        return
+    bucket = recurring_sections.setdefault(section, [])
+    key = re.sub(r"\s+", "", re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", value))
+    seen_keys = {
+        re.sub(r"\s+", "", re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", item.strip()))
+        for item in bucket
+    }
+    if key and key not in seen_keys:
+        bucket.append(value)
+
+
+def normalize_chunk_note_for_assembly(note: str, recurring_sections: dict[str, list[str]] | None = None) -> str:
     lines = []
+    recurring_section: str | None = None
     for raw_line in note.strip().splitlines():
         line = raw_line.rstrip()
-        if line.startswith("# "):
-            continue
-        if line.startswith("## ") or line.startswith("### "):
-            heading = re.sub(r"^#+\s+", "", line).strip()
+        heading_match = HEADING_RE.match(line)
+        if heading_match and len(heading_match.group(1)) <= 3:
+            heading = heading_match.group(2).strip()
+            normalized_heading = normalize_heading_title(heading)
+            if recurring_sections is not None and normalized_heading in RECURRING_ASSEMBLY_SECTIONS:
+                recurring_section = normalized_heading
+                recurring_sections.setdefault(recurring_section, [])
+                continue
+            if recurring_sections is not None and is_recurring_container_heading(normalized_heading):
+                recurring_section = None
+                continue
+            recurring_section = None
+            if len(heading_match.group(1)) == 1:
+                continue
             lines.append(f"### {heading}")
             continue
+
+        if recurring_section:
+            if recurring_sections is not None:
+                add_recurring_line(recurring_sections, recurring_section, line)
+            continue
+
         if line.startswith("#### "):
             heading = re.sub(r"^#+\s+", "", line).strip()
             lines.append(f"**{heading}**")
@@ -169,6 +220,24 @@ def overall_chunk_range(chunk_ranges: list[str]) -> str:
     return f"{start}-{end}"
 
 
+def render_recurring_sections(recurring_sections: dict[str, list[str]], time_range: str) -> str:
+    parts = []
+    heading = "## 汇总复习材料"
+    if time_range:
+        heading += f" [{time_range}]"
+    for section in RECURRING_ASSEMBLY_SECTION_ORDER:
+        lines = recurring_sections.get(section) or []
+        if not lines:
+            continue
+        if not parts:
+            parts.append(heading)
+        subheading = f"### 全局{section}"
+        if time_range:
+            subheading += f" [{time_range}]"
+        parts.extend(["", subheading, *lines])
+    return "\n".join(parts).strip()
+
+
 def assemble_chunk_notes(title: str, source_url: str | None, chunk_notes: list[str], chunk_ranges: list[str]) -> str:
     learning_range = overall_chunk_range(chunk_ranges)
     learning_heading = "## 学习路线"
@@ -182,12 +251,16 @@ def assemble_chunk_notes(title: str, source_url: str | None, chunk_notes: list[s
     ]
     if source_url:
         parts.extend(["", f"来源：{source_url}"])
+    recurring_sections: dict[str, list[str]] = {}
     for index, note in enumerate(chunk_notes):
         time_range = chunk_ranges[index] if index < len(chunk_ranges) else ""
         heading = f"## 第 {index + 1} 部分"
         if time_range:
             heading += f" [{time_range}]"
-        parts.extend(["", heading, "", normalize_chunk_note_for_assembly(note)])
+        parts.extend(["", heading, "", normalize_chunk_note_for_assembly(note, recurring_sections)])
+    recurring_summary = render_recurring_sections(recurring_sections, learning_range)
+    if recurring_summary:
+        parts.extend(["", recurring_summary])
     return "\n".join(part for part in parts if part is not None).strip() + "\n"
 
 

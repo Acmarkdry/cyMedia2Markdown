@@ -186,7 +186,7 @@ tools\parallel_regenerate.cmd --slug BVxxxxxxxxxx --jobs 2 --merge-strategy asse
 --shutdown               全部任务完成后 3 分钟自动关机
 ```
 
-每个子任务日志写入 `output/parallel_<视频标题>_<timestamp>.log`，汇总写入 `output/parallel_summary_<timestamp>.json`。对于 60 分钟以上或转写过长的视频，建议优先使用分块；如果最终合并反复卡住，可以改用 `--merge-strategy assemble`，它不会再发起最后的大合并请求，而是保留各分块讲义内容并按全局时间线组织。
+每个子任务日志写入 `output/parallel_<视频标题>_<timestamp>.log`，汇总写入 `output/parallel_summary_<timestamp>.json`。对于 60 分钟以上或转写过长的视频，建议优先使用分块；如果最终合并反复卡住，可以改用 `--merge-strategy assemble`，它不会再发起最后的大合并请求，而是保留各分块讲义内容并按全局时间线组织。assemble 会把每个分块重复出现的“核心结论 / 术语表 / 实践清单 / 复习问题”等模板栏目抽取到文末全局汇总，避免每个 chunk 重复一遍。
 
 ### 笔记风格与截图约束
 
@@ -196,7 +196,7 @@ tools\parallel_regenerate.cmd --slug BVxxxxxxxxxx --jobs 2 --merge-strategy asse
 - 列表只用于流程、对比、术语表、实践清单、复习问题和少量核心结论。
 - `#image[]` 中只能写阿拉伯数字，例如 `#image[120]`，不能写 `01:20`、中文说明或单位。
 - `##` 标题要求带 `[mm:ss-mm:ss]` 或 `[hh:mm:ss-hh:mm:ss]` 时间范围。
-- 质量检查会关注正文长度、截图数量、章节/小节数量、讲义式段落数量和列表占比。
+- 质量检查会关注正文长度、截图数量、章节/小节数量、讲义式段落数量、列表占比和重复模板小节。
 
 ### 重建截图和 HTML
 

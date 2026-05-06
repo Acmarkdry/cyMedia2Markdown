@@ -89,7 +89,7 @@ export FASTER_WHISPER_COMPUTE_TYPE=int8
 - 笔记风格：讲义式自然段优先，避免把主体写成连续项目符号清单。
 - 截图标记：必须是单独一行 `#image[整数秒]`，方括号里只能写阿拉伯数字。
 
-当视频超过约 45 分钟或转写文本过长时，后端会先分块生成局部笔记，再做分组合并和最终合并。重生成脚本还提供 `--merge-strategy assemble`，用于在大合并 prompt 网络不稳定或耗时过长时，本地按时间段拼接各分块笔记。
+当视频超过约 45 分钟或转写文本过长时，后端会先分块生成局部笔记，再做分组合并和最终合并。重生成脚本还提供 `--merge-strategy assemble`，用于在大合并 prompt 网络不稳定或耗时过长时，本地按时间段拼接各分块笔记。assemble 会把每个分块重复出现的“核心结论 / 术语表 / 实践清单 / 复习问题”等模板栏目抽取到文末全局汇总，避免每个 chunk 重复一遍。
 
 质量检查会评估：
 
@@ -99,6 +99,7 @@ image_markers      有效 #image[] 数量
 h2 / h3            章节和小节数量
 prose_paragraphs   讲义式自然段数量
 list_ratio         列表行占比
+repeated_template_headings 重复模板小节
 ```
 
 若质量不足且未关闭 retry，后端会追加一次修复 prompt，要求补足技术细节、截图和自然段表达。批量重生成结果会写入 `output/<视频标题>/backend_video_notes_quality.json`。
