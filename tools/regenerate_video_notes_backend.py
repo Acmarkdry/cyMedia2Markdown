@@ -139,6 +139,7 @@ def process_video(root: Path, video: dict, args) -> dict:
 
     status = {
         "slug": video["slug"],
+        "source_id": video.get("source_id"),
         "title": video["title"],
         "out_dir": str(out_dir),
         "media": media,

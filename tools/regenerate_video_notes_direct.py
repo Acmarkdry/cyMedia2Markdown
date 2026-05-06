@@ -69,6 +69,8 @@ def resolve_video(out_dir: Path, slug: str) -> dict:
         raise RuntimeError(f"Cached video file is missing: {video_path}")
     return {
         "slug": slug,
+        "source_id": status.get("source_id") or media.get("source_id") or media.get("bv_id"),
+        "legacy_slug": status.get("legacy_slug"),
         "title": status.get("title") or media.get("title") or slug,
         "source_url": media.get("source_url"),
         "media": media,
@@ -194,6 +196,8 @@ def process_slug(slug: str, args) -> dict:
 
     status = {
         "slug": slug,
+        "source_id": video.get("source_id"),
+        "legacy_slug": video.get("legacy_slug"),
         "title": video["title"],
         "out_dir": str(out_dir),
         "media": video["media"],

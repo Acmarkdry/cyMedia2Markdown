@@ -392,7 +392,12 @@ def render_html(out_dir: Path):
 def process_video(root: Path, video: dict, args) -> dict:
     out_dir = root / "output" / video["slug"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    status = {"slug": video["slug"], "title": video["title"], "out_dir": str(out_dir)}
+    status = {
+        "slug": video["slug"],
+        "source_id": video.get("source_id"),
+        "title": video["title"],
+        "out_dir": str(out_dir),
+    }
 
     media = post_json(
         f"{API_BASE}/files/media-from-url",

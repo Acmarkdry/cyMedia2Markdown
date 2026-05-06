@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from video_manifest import load_manifest, unique_slugs
+from video_manifest import load_manifest, safe_output_name, unique_slugs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +26,7 @@ def discover_output_slugs() -> list[str]:
         return []
     slugs = []
     for path in sorted(OUTPUT_ROOT.iterdir()):
-        if not path.is_dir() or not path.name.startswith("BV"):
+        if not path.is_dir():
             continue
         if (path / "status.json").exists() and (path / "transcript.json").exists():
             slugs.append(path.name)
@@ -68,6 +68,10 @@ def build_child_command(slug: str, args) -> list[str]:
     if args.force_chunks:
         command.append("--force-chunks")
     return command
+
+
+def log_file_stem(slug: str) -> str:
+    return safe_output_name(slug, "video", limit=80)
 
 
 def read_quality(slug: str) -> dict | None:
@@ -131,7 +135,7 @@ def launch_jobs(slugs: list[str], args) -> int:
     while pending or running:
         while pending and len(running) < args.jobs:
             slug = pending.pop(0)
-            log_path = log_dir / f"parallel_{slug}_{stamp}.log"
+            log_path = log_dir / f"parallel_{log_file_stem(slug)}_{stamp}.log"
             command = build_child_command(slug, args)
             if args.dry_run:
                 results[slug] = {"exit_code": 0, "log": str(log_path), "command": command}
@@ -192,7 +196,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run direct video note regeneration jobs in parallel.")
     parser.add_argument("--manifest", type=Path, help="JSON/JSONL video manifest; only slugs are used here.")
     parser.add_argument("--slug", action="append", help="Slug to process. Can be repeated.")
-    parser.add_argument("--all-output", action="store_true", help="Process all output/BV* folders with status.json and transcript.json.")
+    parser.add_argument("--all-output", action="store_true", help="Process all output folders with status.json and transcript.json.")
     parser.add_argument("--jobs", type=int, default=2, help="Maximum concurrent Codex CLI jobs.")
     parser.add_argument("--chunk-minutes", type=int, default=12)
     parser.add_argument("--llm-timeout", type=int, default=3600)

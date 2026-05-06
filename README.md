@@ -105,7 +105,6 @@ FASTER_WHISPER_COMPUTE_TYPE=int8
 {
   "videos": [
     {
-      "slug": "BVxxxxxxxxxx",
       "title": "课程或演讲标题",
       "url": "https://www.bilibili.com/video/BVxxxxxxxxxx/"
     }
@@ -113,7 +112,7 @@ FASTER_WHISPER_COMPUTE_TYPE=int8
 }
 ```
 
-`slug` 用作 `output/<slug>/` 目录名；B 站链接如果不写 `slug`，工具会尝试从 URL 自动提取 BV 号。建议把自己的清单放到 `output/` 或其他本地目录，不要把包含个人整理任务的 manifest 提交到仓库。
+默认会用视频标题生成 `output/<视频标题>/` 目录名，便于本地索引。B 站链接的 BV 号会保存在 `source_id` 中，用于追踪来源或通过 `--only BVxxxxxxxxxx` 过滤；如果需要手动指定目录名，可以在 manifest 中写 `slug` 或 `output_name`。建议把自己的清单放到 `output/` 或其他本地目录，不要把包含个人整理任务的 manifest 提交到仓库。
 
 ### URL 到完整笔记
 
@@ -122,7 +121,7 @@ FASTER_WHISPER_COMPUTE_TYPE=int8
 ```powershell
 tools\batch_video_notes.cmd --manifest output\my_videos.json
 tools\batch_video_notes.cmd --manifest output\my_videos.json --only BVxxxxxxxxxx
-tools\batch_video_notes.cmd --manifest output\my_videos.json --start-at BVxxxxxxxxxx
+tools\batch_video_notes.cmd --manifest output\my_videos.json --start-at "课程或演讲标题"
 ```
 
 这个脚本默认顺序执行。ASR 会使用 GPU 锁避免多个转写任务抢同一张显卡；已经存在的 `transcript.json`、`notes_raw.md` 会被复用，除非传入 `--force-asr` 或 `--force-codex`。
@@ -144,7 +143,7 @@ backend\.venv\Scripts\python.exe tools\regenerate_video_notes_backend.py --manif
 ```powershell
 tools\parallel_regenerate.cmd --all-output --jobs 3
 tools\parallel_regenerate.cmd --manifest output\my_videos.json --jobs 3
-tools\parallel_regenerate.cmd --slug BVxxxxxxxxxx --slug BVyyyyyyyyyy --jobs 2
+tools\parallel_regenerate.cmd --slug "课程或演讲标题" --jobs 2
 ```
 
 常用参数：
@@ -168,10 +167,17 @@ tools\parallel_regenerate.cmd --slug BVxxxxxxxxxx --slug BVyyyyyyyyyy --jobs 2
 
 ```powershell
 backend\.venv\Scripts\python.exe tools\rebuild_note_assets.py --refresh-screenshots
-backend\.venv\Scripts\python.exe tools\rebuild_note_assets.py BVxxxxxxxxxx
+backend\.venv\Scripts\python.exe tools\rebuild_note_assets.py "课程或演讲标题"
 ```
 
-脚本会读取现有 `notes_raw.md`，重新生成 `notes.md`、`notes.html` 和截图引用。`--refresh-screenshots` 会删除并重新截取 `output/<slug>/screenshots/`。
+脚本会读取现有 `notes_raw.md`，重新生成 `notes.md`、`notes.html` 和截图引用。`--refresh-screenshots` 会删除并重新截取 `output/<视频标题>/screenshots/`。
+
+如果已经有一批旧的 `output/BV.../` 目录，可以把它们重命名成视频标题目录：
+
+```powershell
+backend\.venv\Scripts\python.exe tools\rename_output_dirs.py --dry-run
+backend\.venv\Scripts\python.exe tools\rename_output_dirs.py
+```
 
 所有批处理结果都会写入 `output/`。该目录已被 `.gitignore` 排除，因为里面可能包含字幕、截图、笔记和其他来自第三方媒体的派生内容，不应默认提交到公开仓库。
 

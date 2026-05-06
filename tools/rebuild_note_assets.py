@@ -27,7 +27,14 @@ def iter_note_dirs(slugs: list[str]) -> list[Path]:
         return [OUTPUT_ROOT / slug for slug in slugs]
     if not OUTPUT_ROOT.exists():
         return []
-    return sorted(path for path in OUTPUT_ROOT.iterdir() if path.is_dir() and path.name.startswith("BV"))
+    return sorted(
+        path
+        for path in OUTPUT_ROOT.iterdir()
+        if path.is_dir()
+        and (path / "status.json").exists()
+        and (path / "transcript.json").exists()
+        and (path / "notes_raw.md").exists()
+    )
 
 
 def assert_workspace_screenshots_dir(path: Path) -> None:
@@ -74,8 +81,13 @@ def rebuild_one(out_dir: Path, refresh_screenshots: bool) -> dict:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description="Rebuild generated note screenshots and HTML.")
-    parser.add_argument("slugs", nargs="*", help="Output slugs to rebuild, for example BVxxxxxxxxxx.")
+    parser.add_argument("slugs", nargs="*", help="Output folder names to rebuild.")
     parser.add_argument(
         "--refresh-screenshots",
         action="store_true",
