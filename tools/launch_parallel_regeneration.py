@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from video_manifest import load_manifest, safe_output_name, unique_slugs
+from video_manifest import load_manifest, safe_output_name
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,37 +21,93 @@ def log_event(event: dict) -> None:
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
-def discover_output_slugs() -> list[str]:
+def load_status(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def job_key(job: dict) -> str:
+    return str(job.get("selector") or job.get("slug") or "")
+
+
+def unique_jobs(jobs: list[dict]) -> list[dict]:
+    seen = set()
+    result = []
+    for job in jobs:
+        key = job_key(job)
+        if key and key not in seen:
+            seen.add(key)
+            result.append(job)
+    return result
+
+
+def discover_output_jobs() -> list[dict]:
     if not OUTPUT_ROOT.exists():
         return []
-    slugs = []
+    jobs = []
     for path in sorted(OUTPUT_ROOT.iterdir()):
         if not path.is_dir():
             continue
-        if (path / "status.json").exists() and (path / "transcript.json").exists():
-            slugs.append(path.name)
-    return slugs
+        status_path = path / "status.json"
+        if status_path.exists() and (path / "transcript.json").exists():
+            try:
+                status = load_status(status_path)
+            except Exception:
+                status = {}
+            selector = status.get("source_id") or status.get("legacy_slug") or path.name
+            jobs.append({"selector": selector, "slug": path.name})
+    return jobs
 
 
-def resolve_slugs(args) -> list[str]:
-    slugs = list(args.slug or [])
+def resolve_output_dir(selector: str) -> Path | None:
+    exact = OUTPUT_ROOT / selector
+    if (exact / "status.json").exists():
+        return exact
+    if not OUTPUT_ROOT.exists():
+        return None
+    for path in OUTPUT_ROOT.iterdir():
+        status_path = path / "status.json"
+        if not path.is_dir() or not status_path.exists():
+            continue
+        try:
+            status = load_status(status_path)
+        except Exception:
+            continue
+        if selector in {
+            path.name,
+            status.get("slug"),
+            status.get("source_id"),
+            status.get("legacy_slug"),
+            status.get("title"),
+        }:
+            return path
+    return None
+
+
+def resolve_jobs(args) -> list[dict]:
+    jobs = [{"selector": slug, "slug": (resolve_output_dir(slug) or (OUTPUT_ROOT / slug)).name} for slug in (args.slug or [])]
     if args.manifest:
-        slugs.extend(video["slug"] for video in load_manifest(args.manifest))
+        jobs.extend(
+            {
+                "selector": video.get("source_id") or video["slug"],
+                "slug": video["slug"],
+            }
+            for video in load_manifest(args.manifest)
+        )
     if args.all_output:
-        slugs.extend(discover_output_slugs())
-    selected = unique_slugs(slugs)
+        jobs.extend(discover_output_jobs())
+    selected = unique_jobs(jobs)
     if not selected:
-        raise RuntimeError("No slugs selected. Use --slug, --manifest, or --all-output.")
+        raise RuntimeError("No videos selected. Use --slug, --manifest, or --all-output.")
     return selected
 
 
-def build_child_command(slug: str, args) -> list[str]:
+def build_child_command(job: dict, args) -> list[str]:
     python_exe = str(args.python or DEFAULT_PYTHON)
     command = [
         python_exe,
         str(ROOT / "tools" / "regenerate_video_notes_direct.py"),
         "--slug",
-        slug,
+        job["selector"],
         "--llm-timeout",
         str(args.llm_timeout),
         "--chunk-minutes",
@@ -67,6 +123,12 @@ def build_child_command(slug: str, args) -> list[str]:
         command.append("--no-clear-screenshots")
     if args.force_chunks:
         command.append("--force-chunks")
+    if args.cache_after_epoch is not None:
+        command.extend(["--cache-after-epoch", str(args.cache_after_epoch)])
+    if args.merge_group_size is not None:
+        command.extend(["--merge-group-size", str(args.merge_group_size)])
+    if args.merge_strategy:
+        command.extend(["--merge-strategy", args.merge_strategy])
     return command
 
 
@@ -75,7 +137,8 @@ def log_file_stem(slug: str) -> str:
 
 
 def read_quality(slug: str) -> dict | None:
-    quality_path = OUTPUT_ROOT / slug / "backend_video_notes_quality.json"
+    out_dir = resolve_output_dir(slug) or (OUTPUT_ROOT / slug)
+    quality_path = out_dir / "backend_video_notes_quality.json"
     if not quality_path.exists():
         return None
     try:
@@ -85,21 +148,25 @@ def read_quality(slug: str) -> dict | None:
 
 
 def note_size_kb(slug: str) -> float:
-    notes_path = OUTPUT_ROOT / slug / "notes.md"
+    out_dir = resolve_output_dir(slug) or (OUTPUT_ROOT / slug)
+    notes_path = out_dir / "notes.md"
     if not notes_path.exists():
         return 0.0
     return round(notes_path.stat().st_size / 1024, 1)
 
 
-def summarize(slugs: list[str], results: dict[str, dict], summary_path: Path) -> list[dict]:
+def summarize(jobs: list[dict], results: dict[str, dict], summary_path: Path) -> list[dict]:
     summary = []
-    for slug in slugs:
+    for job in jobs:
+        slug = job["slug"]
+        selector = job["selector"]
         quality_payload = read_quality(slug)
         quality = (quality_payload or {}).get("quality") or {}
-        result = results.get(slug) or {}
+        result = results.get(selector) or {}
         summary.append(
             {
                 "slug": slug,
+                "selector": selector,
                 "exit_code": result.get("exit_code"),
                 "log": result.get("log"),
                 "notes_kb": note_size_kb(slug),
@@ -115,18 +182,18 @@ def summarize(slugs: list[str], results: dict[str, dict], summary_path: Path) ->
     return summary
 
 
-def launch_jobs(slugs: list[str], args) -> int:
+def launch_jobs(jobs: list[dict], args) -> int:
     log_dir = Path(args.log_dir or OUTPUT_ROOT)
     log_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
     launcher_log = log_dir / f"parallel_launcher_{stamp}.log"
     summary_path = log_dir / f"parallel_summary_{stamp}.json"
     launcher_log.write_text(
-        json.dumps({"stage": "start", "slugs": slugs, "jobs": args.jobs, "time": time.time()}, ensure_ascii=False) + "\n",
+        json.dumps({"stage": "start", "jobs": jobs, "parallelism": args.jobs, "time": time.time()}, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
-    pending = list(slugs)
+    pending = list(jobs)
     running = []
     results: dict[str, dict] = {}
     env = os.environ.copy()
@@ -134,16 +201,18 @@ def launch_jobs(slugs: list[str], args) -> int:
 
     while pending or running:
         while pending and len(running) < args.jobs:
-            slug = pending.pop(0)
+            job = pending.pop(0)
+            slug = job["slug"]
+            selector = job["selector"]
             log_path = log_dir / f"parallel_{log_file_stem(slug)}_{stamp}.log"
-            command = build_child_command(slug, args)
+            command = build_child_command(job, args)
             if args.dry_run:
-                results[slug] = {"exit_code": 0, "log": str(log_path), "command": command}
-                log_event({"stage": "dry-run", "slug": slug, "command": command})
+                results[selector] = {"exit_code": 0, "log": str(log_path), "command": command}
+                log_event({"stage": "dry-run", "slug": slug, "selector": selector, "command": command})
                 continue
 
             log_file = log_path.open("w", encoding="utf-8")
-            log_file.write(json.dumps({"stage": "start", "slug": slug, "command": command}, ensure_ascii=False) + "\n")
+            log_file.write(json.dumps({"stage": "start", "slug": slug, "selector": selector, "command": command}, ensure_ascii=False) + "\n")
             log_file.flush()
             process = subprocess.Popen(
                 command,
@@ -154,10 +223,10 @@ def launch_jobs(slugs: list[str], args) -> int:
                 encoding="utf-8",
                 env=env,
             )
-            running.append({"slug": slug, "process": process, "log_file": log_file, "log_path": log_path})
-            log_event({"stage": "launched", "slug": slug, "pid": process.pid, "log": str(log_path)})
+            running.append({"slug": slug, "selector": selector, "process": process, "log_file": log_file, "log_path": log_path})
+            log_event({"stage": "launched", "slug": slug, "selector": selector, "pid": process.pid, "log": str(log_path)})
             with launcher_log.open("a", encoding="utf-8") as fp:
-                fp.write(json.dumps({"stage": "launched", "slug": slug, "pid": process.pid, "log": str(log_path)}, ensure_ascii=False) + "\n")
+                fp.write(json.dumps({"stage": "launched", "slug": slug, "selector": selector, "pid": process.pid, "log": str(log_path)}, ensure_ascii=False) + "\n")
 
         if args.dry_run:
             continue
@@ -170,12 +239,12 @@ def launch_jobs(slugs: list[str], args) -> int:
             item["log_file"].write(json.dumps({"stage": "finished", "slug": item["slug"], "exit_code": exit_code}, ensure_ascii=False) + "\n")
             item["log_file"].close()
             running.remove(item)
-            results[item["slug"]] = {"exit_code": exit_code, "log": str(item["log_path"])}
-            log_event({"stage": "finished", "slug": item["slug"], "exit_code": exit_code, "log": str(item["log_path"])})
+            results[item["selector"]] = {"exit_code": exit_code, "log": str(item["log_path"])}
+            log_event({"stage": "finished", "slug": item["slug"], "selector": item["selector"], "exit_code": exit_code, "log": str(item["log_path"])})
             with launcher_log.open("a", encoding="utf-8") as fp:
-                fp.write(json.dumps({"stage": "finished", "slug": item["slug"], "exit_code": exit_code}, ensure_ascii=False) + "\n")
+                fp.write(json.dumps({"stage": "finished", "slug": item["slug"], "selector": item["selector"], "exit_code": exit_code}, ensure_ascii=False) + "\n")
 
-    summary = summarize(slugs, results, summary_path)
+    summary = summarize(jobs, results, summary_path)
     log_event({"stage": "summary", "path": str(summary_path), "items": summary})
     if args.shutdown and not args.dry_run:
         subprocess.run(
@@ -201,10 +270,17 @@ def main() -> int:
     parser.add_argument("--chunk-minutes", type=int, default=12)
     parser.add_argument("--llm-timeout", type=int, default=3600)
     parser.add_argument("--max-tokens", type=int)
-    parser.add_argument("--remarks", default="请按高密度技术复习资料输出，不要压缩关键细节。")
+    parser.add_argument("--remarks", default="请按讲义式高密度技术复习资料输出，用自然段解释机制和取舍，不要把主体写成项目符号清单，也不要压缩关键细节。")
     parser.add_argument("--no-quality-retry", dest="quality_retry", action="store_false")
     parser.add_argument("--no-clear-screenshots", dest="clear_screenshots", action="store_false")
     parser.add_argument("--force-chunks", action="store_true")
+    parser.add_argument(
+        "--cache-after-epoch",
+        type=float,
+        help="Only reuse existing chunk files modified at or after this epoch timestamp.",
+    )
+    parser.add_argument("--merge-group-size", type=int, default=3)
+    parser.add_argument("--merge-strategy", choices=["codex", "assemble"], default="codex")
     parser.add_argument("--poll-interval", type=int, default=5)
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--python", type=Path, help="Python executable to run child jobs.")
@@ -222,8 +298,8 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
-    slugs = resolve_slugs(args)
-    return launch_jobs(slugs, args)
+    jobs = resolve_jobs(args)
+    return launch_jobs(jobs, args)
 
 
 if __name__ == "__main__":

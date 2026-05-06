@@ -203,7 +203,7 @@ def build_video_notes_prompt(
 视频标题：{title}
 来源：{source_url or "本地视频"}
 {part_line}视频或分块时长：约 {duration_text}
-任务：根据下面带时间戳的转写稿，生成中文 Markdown 深度学习笔记。目标是让读者不看原视频，也能复习主要技术内容、关键细节和实践方法。
+任务：根据下面带时间戳的转写稿，生成中文 Markdown 深度学习笔记。目标是让读者不看原视频，也能像阅读课程讲义一样理解主要技术内容、关键细节和实践方法。
 
 硬性要求：
 1. 只输出 Markdown 正文，不要解释执行过程。
@@ -213,18 +213,24 @@ def build_video_notes_prompt(
 5. 标题层级只使用 `#`、`##`、`###`，不允许跳级；只使用一个 `#` 主标题。
 6. 每个 `##` 章节标题后必须带时间范围，例如 `## 核心机制 [00:00-04:30]`。每个 `###` 小节也尽量带时间范围。
 7. 时间范围必须基于字幕时间信息，格式为 `[mm:ss-mm:ss]` 或 `[hh:mm:ss-hh:mm:ss]`，00 小时时隐藏小时。
-8. 章节数量建议 {targets["chapters"]} 个。每个主要章节至少包含 4-8 条高信息量要点；涉及流程、配置、代码、蓝图或系统结构时，必须拆成步骤。
+8. 章节数量建议 {targets["chapters"]} 个。主体必须采用“讲义式陈述”：每个 `###` 小节先用 2-4 个自然段解释清楚，每段 2-4 句，段落中要写明是什么、为什么、怎么运作、工程取舍和实际例子。
 9. 输出不要过度压缩。当前目标正文至少约 {targets["min_chars"]} 个中文字符。
 {token_budget_line}10. 对关键概念尽量补充“为什么重要 / 适用场景 / 常见坑 / 和其他系统的关系”。
-11. 插入 {targets["screenshots_target"]} 个截图标记。截图标记必须单独一行，且只能是 `#image[整数秒]`。
-12. 秒数必须来自转写稿附近，选择适合看 PPT、架构图、编辑器操作、代码、蓝图、效果对比或演示画面的时刻。
-13. 不要虚构视频中没有的信息。ASR 可能有误，请结合 Unreal Engine 技术术语合理纠错，但不能编造不存在的 API 或流程。
+11. 插入 {targets["screenshots_target"]} 个截图标记。截图标记必须单独一行，且只能是 `#image[整数秒]`，例如 `#image[120]`。
+12. `#image[]` 中只允许写阿拉伯数字，不能写中文、说明文字、冒号、时间范围或单位。
+13. 秒数必须来自转写稿附近，选择适合看 PPT、架构图、编辑器操作、代码、蓝图、效果对比或演示画面的时刻。
+14. 不要虚构视频中没有的信息。ASR 可能有误，请结合 Unreal Engine 技术术语合理纠错，但不能编造不存在的 API 或流程。
+15. 不要把主体写成连续项目符号清单。列表只能用于流程步骤、参数/组件对比、术语表、实践清单、复习问题和少量核心结论；普通概念解释必须写成完整陈述句。
+16. 不要在每个小节机械套用“背景与问题 / 核心机制 / 实现步骤 / 注意事项”的固定列表。需要这些内容时，把它们自然融入段落。
+17. 允许保留高密度，但密度要来自具体机制、因果关系、设计动机、工程代价和例子，而不是把短句堆成条目。
 {remarks_line}
 建议输出结构：
 # 主标题
 ## 核心结论 [时间]
+此处可以用 6-10 条项目符号快速概览，但不要替代后文讲义式解释。
 ## 主题章节 [时间]
 ### 子主题 [时间]
+先写自然段解释，再在必要时使用短列表整理步骤、对比或检查项。
 ## 易错点与调试建议
 ## 术语表
 ## 实践清单
@@ -264,9 +270,13 @@ def build_merge_prompt(
 1. 只输出 Markdown 正文。
 2. 合并重复内容，但不要删减重要技术细节、步骤、配置、类名、函数名、蓝图节点、注意事项和实践建议。
 3. 保留并整理所有有价值的 `#image[整数秒]` 标记，最终至少保留 {targets["screenshots_min"]} 个截图标记。
-4. 保持全局时间线顺序，标题时间范围必须仍然对应原视频。
-5. 只使用 `#`、`##`、`###` 三层标题。
-6. 最终正文至少约 {targets["min_chars"]} 个中文字符；如果分块笔记内容丰富，不要为了简短而压缩。
+4. `#image[]` 中只允许写阿拉伯数字，不能写中文、说明文字、冒号、时间范围或单位。
+5. 保持全局时间线顺序，标题时间范围必须仍然对应原视频。
+6. 只使用 `#`、`##`、`###` 三层标题。
+7. 最终正文至少约 {targets["min_chars"]} 个中文字符；如果分块笔记内容丰富，不要为了简短而压缩。
+8. 最终文风必须是讲义式陈述。每个主要 `###` 小节先用自然段解释，不要把分块笔记直接合成项目符号清单。
+9. 列表只能用于流程、对比、术语表、实践清单、复习问题和少量核心结论。若分块笔记里大量使用列表，合并时要改写成连贯段落，并保留其中的技术细节。
+10. 合并时优先写清因果关系、设计动机、工程取舍和例子；不要只罗列“是什么”。
 {token_budget_line}
 {remarks_line}
 分块笔记：
@@ -274,11 +284,85 @@ def build_merge_prompt(
 """
 
 
+def scale_merge_targets(targets: dict, note_count: int, total_count: int) -> dict:
+    if total_count <= 0:
+        return dict(targets)
+    ratio = max(0.1, min(1.0, note_count / total_count))
+    adjusted = dict(targets)
+    adjusted["screenshots_min"] = max(3, min(targets["screenshots_min"], int(targets["screenshots_min"] * ratio)))
+    adjusted["min_chars"] = max(8000, min(targets["min_chars"], int(targets["min_chars"] * ratio * 1.2)))
+    return adjusted
+
+
+def merge_chunk_notes_with_codex(
+    title: str,
+    source_url: str | None,
+    chunk_notes: list[str],
+    targets: dict,
+    remarks: str | None,
+    max_tokens: int | None,
+    timeout: int,
+    group_size: int = 3,
+) -> tuple[str, str]:
+    if group_size < 2 or len(chunk_notes) <= group_size:
+        prompt = build_merge_prompt(title, source_url, chunk_notes, targets, remarks, max_tokens=max_tokens)
+        return run_codex_cli(prompt, timeout), prompt
+
+    grouped_notes: list[str] = []
+    group_count = (len(chunk_notes) + group_size - 1) // group_size
+    for start in range(0, len(chunk_notes), group_size):
+        group_index = start // group_size + 1
+        group = chunk_notes[start : start + group_size]
+        group_targets = scale_merge_targets(targets, len(group), len(chunk_notes))
+        group_prompt = build_merge_prompt(
+            f"{title} 分组合并 {group_index}/{group_count}",
+            source_url,
+            group,
+            group_targets,
+            remarks,
+            max_tokens=max_tokens,
+        )
+        grouped_notes.append(run_codex_cli(group_prompt, timeout))
+
+    prompt = build_merge_prompt(title, source_url, grouped_notes, targets, remarks, max_tokens=max_tokens)
+    return run_codex_cli(prompt, timeout), prompt
+
+
 def assess_markdown_quality(markdown: str, targets: dict) -> dict:
     image_markers = re.findall(r"^#image\[\d+\]$", markdown, flags=re.MULTILINE)
     h2_count = len(re.findall(r"^## ", markdown, flags=re.MULTILINE))
     h3_count = len(re.findall(r"^### ", markdown, flags=re.MULTILINE))
     char_count = len(markdown)
+    nonempty_lines = [
+        line.strip()
+        for line in markdown.splitlines()
+        if line.strip()
+        and not line.strip().startswith("```")
+        and not line.strip().startswith("#image[")
+    ]
+    list_line_count = len(
+        [
+            line
+            for line in nonempty_lines
+            if re.match(r"^(?:[-*+]|\d+[.)])\s+", line)
+        ]
+    )
+    prose_lines = [
+        line
+        for line in nonempty_lines
+        if not line.startswith("#")
+        and not line.startswith("!")
+        and not re.match(r"^(?:[-*+]|\d+[.)])\s+", line)
+    ]
+    prose_paragraphs = len(
+        re.findall(
+            r"(?:^|\n\n)(?![#>\-\*\+\d]|!\[|#image\[).{24,}",
+            markdown.strip(),
+            flags=re.MULTILINE,
+        )
+    )
+    line_count = max(1, len(nonempty_lines))
+    list_ratio = round(list_line_count / line_count, 3)
     problems = []
     if char_count < targets["min_chars"]:
         problems.append(f"正文偏短: {char_count} < {targets['min_chars']}")
@@ -288,6 +372,10 @@ def assess_markdown_quality(markdown: str, targets: dict) -> dict:
         problems.append(f"章节偏少: {h2_count}")
     if h3_count < max(4, h2_count):
         problems.append(f"小节偏少: h3={h3_count}, h2={h2_count}")
+    if prose_paragraphs < max(8, h2_count):
+        problems.append(f"讲义式段落偏少: {prose_paragraphs} < {max(8, h2_count)}")
+    if list_ratio > 0.52 and list_line_count > len(prose_lines):
+        problems.append(f"列表占比偏高: {list_ratio}")
     return {
         "passed": not problems,
         "problems": problems,
@@ -295,6 +383,9 @@ def assess_markdown_quality(markdown: str, targets: dict) -> dict:
         "image_markers": len(image_markers),
         "h2": h2_count,
         "h3": h3_count,
+        "prose_paragraphs": prose_paragraphs,
+        "list_lines": list_line_count,
+        "list_ratio": list_ratio,
     }
 
 
@@ -313,6 +404,7 @@ def build_retry_prompt(original_prompt: str, previous_markdown: str, quality: di
 - 显著增加技术细节、步骤、配置项、类名、函数名、注意事项和实践建议。
 - 增加截图标记数量，截图标记仍必须单独一行 `#image[整数秒]`。
 - 不要只扩写套话，必须围绕转写稿中的具体内容展开。
+- 主体改成讲义式自然段，不要继续输出大段项目符号清单；列表只保留在流程、对比、术语表、实践清单和复习问题中。
 """
 
 
@@ -453,15 +545,15 @@ async def generate_video_notes(request: VideoNotesRequest):
                 max_tokens=request.max_tokens,
             )
             chunk_notes.append(run_codex_cli(prompt, timeout))
-        prompt_used = build_merge_prompt(
+        content, prompt_used = merge_chunk_notes_with_codex(
             title,
             source_url,
             chunk_notes,
             targets,
             request.remarks,
-            max_tokens=request.max_tokens,
+            request.max_tokens,
+            timeout,
         )
-        content = run_codex_cli(prompt_used, timeout)
     else:
         prompt_used = build_video_notes_prompt(
             title=title,

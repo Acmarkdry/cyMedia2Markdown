@@ -179,7 +179,7 @@ def main() -> int:
     parser.add_argument("--llm-timeout", type=int, default=3600)
     parser.add_argument("--chunk-minutes", type=int, default=12)
     parser.add_argument("--max-tokens", type=int)
-    parser.add_argument("--remarks", default="请按高密度技术复习资料输出，不要压缩关键细节。")
+    parser.add_argument("--remarks", default="请按讲义式高密度技术复习资料输出，用自然段解释机制和取舍，不要把主体写成项目符号清单，也不要压缩关键细节。")
     parser.add_argument("--no-quality-retry", dest="quality_retry", action="store_false")
     parser.add_argument("--no-clear-screenshots", dest="clear_screenshots", action="store_false")
     parser.set_defaults(quality_retry=True, clear_screenshots=True)
