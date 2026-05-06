@@ -5,6 +5,7 @@
 - 大模型生成：调用本机 `codex exec`，复用 Codex CLI 登录态，不需要 OpenAI/方舟 API Key。
 - 音频转写：前端抽出的音频上传到本机后端目录，再由 `faster-whisper` 本地转写，不需要火山 AUC、TOS/S3。
 - B站/公开视频链接：后端通过 `yt-dlp` 下载视频，抽取音频用于转写，并用本地 ffmpeg 按 `#image[]` 时间点截帧。
+- 学习笔记生成：默认使用讲义式高密度 prompt，输出自然段解释、时间范围标题和可复查的截图引用。
 
 ## 1. 前置要求
 
@@ -77,3 +78,46 @@ export FASTER_WHISPER_COMPUTE_TYPE=int8
 ```
 
 - 如果 Codex CLI 调用超时，可在前端“生成设置”里调大超时时间。
+
+## 6. 视频笔记生成策略
+
+后端 `/api/v1/llm/video-notes` 会把转写段落整理成 Codex prompt，并调用本机 `codex exec`。默认配置偏向质量：
+
+- 模型：`gpt-5.5`。
+- 推理强度：`xhigh`。
+- 笔记语言：默认中文，Unreal/Lyra/GAS/Common UI 等技术术语保留英文并补充中文解释。
+- 笔记风格：讲义式自然段优先，避免把主体写成连续项目符号清单。
+- 截图标记：必须是单独一行 `#image[整数秒]`，方括号里只能写阿拉伯数字。
+
+当视频超过约 45 分钟或转写文本过长时，后端会先分块生成局部笔记，再做分组合并和最终合并。重生成脚本还提供 `--merge-strategy assemble`，用于在大合并 prompt 网络不稳定或耗时过长时，本地按时间段拼接各分块笔记。
+
+质量检查会评估：
+
+```text
+chars              正文字数
+image_markers      有效 #image[] 数量
+h2 / h3            章节和小节数量
+prose_paragraphs   讲义式自然段数量
+list_ratio         列表行占比
+```
+
+若质量不足且未关闭 retry，后端会追加一次修复 prompt，要求补足技术细节、截图和自然段表达。批量重生成结果会写入 `output/<视频标题>/backend_video_notes_quality.json`。
+
+## 7. 日志与排查
+
+常见日志位置：
+
+```text
+backend/local_storage/logs/backend.log
+output/parallel_<视频标题>_<timestamp>.log
+output/parallel_summary_<timestamp>.json
+```
+
+`tools/batch_video_notes.py` 默认把阶段信息写到标准输出；长时间批处理时建议自行重定向到 `output/batch_<source_id>_<timestamp>.log` 和 `.err.log`，便于中途查看。
+
+排查建议：
+
+- URL 下载失败：先看 `backend.log` 中 `routers.files` 相关行；需要登录态的视频可配置 `YTDLP_COOKIES_FILE`。
+- ASR 卡住或失败：检查 `routers.audio` 日志、GPU 显存和 `FASTER_WHISPER_*` 配置。
+- Codex 生成慢或断流：`batch_*.err.log` 中可能出现 stream reconnect 或 HTTP fallback；只要进程仍在并最终写出 `notes_raw.md`，通常不需要手动干预。
+- 图片异常：检查 `notes_raw.md` 中是否存在非法 `#image[01:20]` 或带中文说明的标记；正常输出会在 `notes.md` 中变成 `![视频截图 mm:ss](screenshots/000123.jpg)`。
