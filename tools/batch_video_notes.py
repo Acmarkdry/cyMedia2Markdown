@@ -485,6 +485,21 @@ def process_video(root: Path, video: dict, args) -> dict:
         flush=True,
     )
 
+    if args.skip_codex:
+        status["skipped_codex"] = True
+        (out_dir / "status.json").write_text(
+            json.dumps(status, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            json.dumps(
+                {"stage": "skip-codex", "slug": video["slug"], "out_dir": str(out_dir)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return status
+
     if not (out_dir / "notes_raw.md").exists() or args.force_codex:
         run_codex(out_dir, args.codex_timeout)
     else:
@@ -524,6 +539,7 @@ def main():
     parser.add_argument("--codex-timeout", type=int, default=3600)
     parser.add_argument("--force-asr", action="store_true")
     parser.add_argument("--force-codex", action="store_true")
+    parser.add_argument("--skip-codex", action="store_true", help="Only download media and write transcripts/status.")
     args = parser.parse_args()
 
     if hasattr(sys.stdout, "reconfigure"):
