@@ -530,6 +530,7 @@ def process_video(root: Path, video: dict, args) -> dict:
 
 
 def main():
+    global API_BASE
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True, type=Path, help="JSON/JSONL video manifest with slug, title, url")
     parser.add_argument("--only", nargs="*", help="Only process these slugs")
@@ -537,10 +538,12 @@ def main():
     parser.add_argument("--poll-interval", type=int, default=30)
     parser.add_argument("--media-timeout", type=int, default=600)
     parser.add_argument("--codex-timeout", type=int, default=3600)
+    parser.add_argument("--api-base", default=API_BASE, help="Backend API base URL, for example http://127.0.0.1:8080/api/v1")
     parser.add_argument("--force-asr", action="store_true")
     parser.add_argument("--force-codex", action="store_true")
     parser.add_argument("--skip-codex", action="store_true", help="Only download media and write transcripts/status.")
     args = parser.parse_args()
+    API_BASE = args.api_base.rstrip("/")
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
