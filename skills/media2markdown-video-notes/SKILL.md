@@ -1,6 +1,6 @@
 ---
 name: media2markdown-video-notes
-description: Use this skill when Codex needs to operate the local Media2Markdown / AI-Media2Doc workflow for converting local videos, audio files, Bilibili URLs, or Bilibili multi-part playlists into high-density Markdown/HTML study notes with transcript files and screenshots. Trigger on requests to batch-process videos, crawl/extract Bilibili course playlists, generate or regenerate video learning notes, use Codex CLI instead of OpenAI API, run local faster-whisper ASR, retry failed video note jobs, validate screenshot references, or maintain the video-to-notes backend workflow in D:\StudyResource\Media2Markdown\AI-Media2Doc.
+description: Use this skill when Codex needs to operate the local Media2Markdown / AI-Media2Doc workflow for converting local videos, audio files, Bilibili URLs, or Bilibili multi-part playlists into high-density Markdown/HTML study notes with transcript files and screenshots. Trigger on requests to batch-process videos, crawl/extract Bilibili course playlists, generate or regenerate video learning notes, use Codex CLI instead of OpenAI API, run local faster-whisper ASR, retry failed video note jobs, validate screenshot references, or maintain the video-to-notes backend workflow in D:\StudyReference\m2m_queue\AI-Media2Doc.
 ---
 
 # Media2Markdown Video Notes
@@ -9,19 +9,21 @@ description: Use this skill when Codex needs to operate the local Media2Markdown
 
 Use the local project at:
 
-`D:\StudyResource\Media2Markdown\AI-Media2Doc`
+`D:\StudyReference\m2m_queue\AI-Media2Doc`
 
-Prefer the project venv:
+Prefer the role-specific project environments:
 
-`.\backend\.venv\Scripts\python.exe`
+`.\.venv-cpu\Scripts\python.exe`
+
+`.\.venv-gpu\Scripts\python.exe`
 
 Treat this project-local skill as the canonical editable copy for repository maintenance. If a future Codex session needs automatic discovery outside this repo, sync this folder to `$CODEX_HOME\skills\media2markdown-video-notes`.
 
 The durable workflow is:
 
 1. Build a manifest for videos.
-2. Prepare media and transcripts with `tools\batch_video_notes.py --skip-codex`.
-3. Generate notes in parallel with `tools\launch_parallel_regeneration.py`.
+2. Prepare media and transcripts with `tools\batch_video_notes.cmd --skip-codex`.
+3. Generate notes in parallel with `tools\parallel_regenerate.cmd`.
 4. Validate `notes.md`, `notes.html`, screenshots, and quality files.
 5. Commit/push only source and docs changes, not `output/`.
 
@@ -51,7 +53,7 @@ Keep folder names human-readable. Do not use only BV ids when the video title is
 Use preparation mode to download media, run local ASR, and write prompts without invoking Codex:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe tools\batch_video_notes.py `
+tools\batch_video_notes.cmd `
   --manifest output\my_manifest.json `
   --poll-interval 20 `
   --media-timeout 1800 `
@@ -61,7 +63,7 @@ Use preparation mode to download media, run local ASR, and write prompts without
 For retrying one item:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe tools\batch_video_notes.py `
+tools\batch_video_notes.cmd `
   --manifest output\my_manifest.json `
   --only BVxxxx_p12 `
   --poll-interval 20 `
@@ -76,7 +78,7 @@ ASR has a GPU lock. Let it run serially unless the user explicitly wants to risk
 For a prepared batch, prefer `assemble` merging to avoid repeated chunk boilerplate:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe tools\launch_parallel_regeneration.py `
+tools\parallel_regenerate.cmd `
   --manifest output\my_manifest.json `
   --jobs 3 `
   --merge-strategy assemble `
@@ -87,7 +89,7 @@ For a prepared batch, prefer `assemble` merging to avoid repeated chunk boilerpl
 When only some videos are ready, launch by `source_id`:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe tools\launch_parallel_regeneration.py `
+tools\parallel_regenerate.cmd `
   --slug BVxxxx_p01 `
   --slug BVxxxx_p02 `
   --jobs 2 `
@@ -182,7 +184,7 @@ for d in Path("output").iterdir():
 for row in sorted(rows):
     print(row)
 print("TOTAL", len(rows), "problems", problems)
-'@ | .\backend\.venv\Scripts\python.exe -
+'@ | .\.venv-cpu\Scripts\python.exe -
 ```
 
 ## Troubleshooting

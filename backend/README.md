@@ -1,110 +1,75 @@
-# 后端本地运行
+# 后端运行说明
 
-当前后端已改成本地优先：
+后端是 FastAPI 服务，负责媒体下载、音频抽取、本地 ASR、Codex CLI 调用、截图、HTML 渲染和分布式队列状态 API。
 
-- 大模型生成：调用本机 `codex exec`，复用 Codex CLI 登录态，不需要 OpenAI/方舟 API Key。
-- 音频转写：前端抽出的音频上传到本机后端目录，再由 `faster-whisper` 本地转写，不需要火山 AUC、TOS/S3。
-- B站/公开视频链接：后端通过 `yt-dlp` 下载视频，抽取音频用于转写，并用本地 ffmpeg 按 `#image[]` 时间点截帧。
-- 学习笔记生成：默认使用讲义式高密度 prompt，输出自然段解释、时间范围标题和可复查的截图引用。
+## 环境
 
-## 1. 前置要求
+Python 固定为 `3.12.x`。依赖由根目录脚本安装，不在 `backend/` 下单独维护旧虚拟环境。
 
-- Python 3.12.x。项目根目录 `.python-version` 固定为 `3.12`，运行脚本会拒绝 3.13/3.11。
-- 已安装并登录 Codex CLI：
-
-```bash
-codex --version
-codex login
-```
-
-## 2. 安装依赖
+GPU/ASR 环境：
 
 ```powershell
 ..\tools\setup_runtime.ps1 -Role gpu
 ```
 
-首次运行 `faster-whisper` 会下载模型文件。默认按 4070 Ti 这类本地显卡配置为 `large-v3 + cuda + float16`，优先保证转写质量。
-
-## 3. 可选环境变量
-
-```bash
-export CODEX_CLI_PATH=codex
-export CODEX_CLI_MODEL=gpt-5.5
-export CODEX_CLI_REASONING_EFFORT=xhigh
-export LOCAL_UPLOAD_DIR=local_storage/uploads
-export LOCAL_MEDIA_DIR=local_storage/media
-export LOCAL_SCREENSHOT_DIR=local_storage/screenshots
-export LOG_DIR=local_storage/logs
-export LOCAL_VIDEO_ARCHIVE_DIRS=
-export YTDLP_COOKIES_FILE=
-export ASR_PROVIDER=faster-whisper
-export ASR_LANGUAGE=auto
-export FASTER_WHISPER_MODEL=large-v3
-export FASTER_WHISPER_DEVICE=cuda
-export FASTER_WHISPER_COMPUTE_TYPE=float16
-export WEB_ACCESS_PASSWORD=
-```
-
-Windows PowerShell 示例：
+CPU/看板环境：
 
 ```powershell
-$env:FASTER_WHISPER_MODEL="large-v3"
-$env:FASTER_WHISPER_DEVICE="cuda"
-$env:FASTER_WHISPER_COMPUTE_TYPE="float16"
+..\tools\setup_runtime.ps1 -Role cpu
+```
+
+## 启动
+
+需要本地 ASR、URL 下载或 GPU prepare worker 时使用 GPU 环境：
+
+```powershell
 ..\.venv-gpu\Scripts\python.exe app.py
 ```
 
-## 4. 启动服务
+只用于前端队列看板或轻量 API 检查时可以使用 CPU 环境：
 
-```bash
+```powershell
 ..\.venv-cpu\Scripts\python.exe app.py
 ```
 
-后端默认监听 `http://localhost:8080`，前端默认也会请求这个地址。
+服务默认监听 `http://localhost:8080`。
 
-## 5. 说明
+## 关键环境变量
 
-- `LOCAL_UPLOAD_DIR` 是本地音频上传目录，相对路径会解析到 `backend/` 目录下。
-- `LOCAL_MEDIA_DIR` 是 URL 视频下载目录，`LOCAL_SCREENSHOT_DIR` 是 URL 视频截帧缓存目录。
-- URL 视频会写入 `_url_cache.json`，同一个链接再次处理会复用本地视频和音频。
-- `LOCAL_VIDEO_ARCHIVE_DIRS` 可配置额外本地视频存档目录，多个目录用英文分号分隔；URL 模式会尝试按视频 ID、标题和唯一时长匹配已有视频，匹配后只抽音频和截图，不重复下载。
-- `LOG_DIR` 是后端日志目录，默认会写入 `backend.log`，方便排查失败原因。
-- 如果 B站视频需要登录态，导出浏览器 cookies.txt 后把路径填到 `YTDLP_COOKIES_FILE`。
-- CPU 转写建议改用 `FASTER_WHISPER_MODEL=small` 或 `base`，并设置：
+完整模板见 [../variables_template.env](../variables_template.env)。
 
-```bash
-export FASTER_WHISPER_DEVICE=cpu
-export FASTER_WHISPER_COMPUTE_TYPE=int8
+```powershell
+$env:CODEX_CLI_PATH="codex"
+$env:CODEX_CLI_MODEL="gpt-5.5"
+$env:CODEX_CLI_REASONING_EFFORT="xhigh"
+$env:LOCAL_UPLOAD_DIR="local_storage/uploads"
+$env:LOCAL_MEDIA_DIR="local_storage/media"
+$env:LOCAL_SCREENSHOT_DIR="local_storage/screenshots"
+$env:LOG_DIR="local_storage/logs"
+$env:M2M_QUEUE_ROOT="D:\StudyReference\m2m_queue\_queue"
+$env:YTDLP_COOKIES_FILE=""
+$env:ASR_PROVIDER="faster-whisper"
+$env:FASTER_WHISPER_MODEL="large-v3"
+$env:FASTER_WHISPER_DEVICE="cuda"
+$env:FASTER_WHISPER_COMPUTE_TYPE="float16"
 ```
 
-- 如果 Codex CLI 调用超时，可在前端“生成设置”里调大超时时间。
+CPU 转写仅适合轻量任务，建议使用 `small` 或 `base`，并设置：
 
-## 6. 视频笔记生成策略
-
-后端 `/api/v1/llm/video-notes` 会把转写段落整理成 Codex prompt，并调用本机 `codex exec`。默认配置偏向质量：
-
-- 模型：`gpt-5.5`。
-- 推理强度：`xhigh`。
-- 笔记语言：默认中文，Unreal/Lyra/GAS/Common UI 等技术术语保留英文并补充中文解释。
-- 笔记风格：讲义式自然段优先，避免把主体写成连续项目符号清单。
-- 截图标记：必须是单独一行 `#image[整数秒]`，方括号里只能写阿拉伯数字。
-
-当视频超过约 45 分钟或转写文本过长时，后端会先分块生成局部笔记，再做分组合并和最终合并。重生成脚本还提供 `--merge-strategy assemble`，用于在大合并 prompt 网络不稳定或耗时过长时，本地按时间段拼接各分块笔记。assemble 会把每个分块重复出现的“核心结论 / 术语表 / 实践清单 / 复习问题”等模板栏目抽取到文末全局汇总，避免每个 chunk 重复一遍。
-
-质量检查会评估：
-
-```text
-chars              正文字数
-image_markers      有效 #image[] 数量
-h2 / h3            章节和小节数量
-prose_paragraphs   讲义式自然段数量
-list_ratio         列表行占比
-repeated_template_headings 重复模板小节
+```powershell
+$env:FASTER_WHISPER_DEVICE="cpu"
+$env:FASTER_WHISPER_COMPUTE_TYPE="int8"
 ```
 
-若质量不足且未关闭 retry，后端会追加一次修复 prompt，要求补足技术细节、截图和自然段表达。批量重生成结果会写入 `output/<视频标题>/backend_video_notes_quality.json`。
+## API 责任
 
-## 7. 日志与排查
+- `/health`：后端健康检查。
+- `/api/v1/files/*`：上传、URL 媒体下载、音频抽取、截图。
+- `/api/v1/audio/*`：本地 ASR 任务。
+- `/api/v1/llm/*`：Codex CLI 生成、视频笔记 prompt、质量检查。
+- `/api/v1/queue/status`：分布式队列看板数据和运行契约。
+
+## 日志
 
 常见日志位置：
 
@@ -114,11 +79,18 @@ output/parallel_<视频标题>_<timestamp>.log
 output/parallel_summary_<timestamp>.json
 ```
 
-`tools/batch_video_notes.py` 默认把阶段信息写到标准输出；长时间批处理时建议自行重定向到 `output/batch_<source_id>_<timestamp>.log` 和 `.err.log`，便于中途查看。
+排查顺序：
 
-排查建议：
+1. URL 下载失败先看 `routers.files` 日志，需要登录态的视频配置 `YTDLP_COOKIES_FILE`。
+2. ASR 失败先看 `routers.audio` 日志、GPU 显存和 `FASTER_WHISPER_*` 配置。
+3. Codex 生成失败先看对应 `parallel_*.log`，确认是否已有可复用 chunk。
+4. 图片异常先看 `notes_raw.md` 是否含非法 `#image[01:20]` 或带说明文字的截图标记。
 
-- URL 下载失败：先看 `backend.log` 中 `routers.files` 相关行；需要登录态的视频可配置 `YTDLP_COOKIES_FILE`。
-- ASR 卡住或失败：检查 `routers.audio` 日志、GPU 显存和 `FASTER_WHISPER_*` 配置。
-- Codex 生成慢或断流：`batch_*.err.log` 中可能出现 stream reconnect 或 HTTP fallback；只要进程仍在并最终写出 `notes_raw.md`，通常不需要手动干预。
-- 图片异常：检查 `notes_raw.md` 中是否存在非法 `#image[01:20]` 或带中文说明的标记；正常输出会在 `notes.md` 中变成 `![视频截图 mm:ss](screenshots/000123.jpg)`。
+## 测试
+
+后端相关测试和验收标准统一维护在 [../docs/testing.md](../docs/testing.md)。最小检查：
+
+```powershell
+..\.venv-cpu\Scripts\python.exe -m py_compile app.py routers\queue.py
+..\.venv-cpu\Scripts\python.exe ..\tools\m2m_doctor.py --role cpu --queue-root D:\StudyReference\m2m_queue\_queue
+```

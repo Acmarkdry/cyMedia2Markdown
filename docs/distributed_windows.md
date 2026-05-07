@@ -249,6 +249,8 @@ tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue
 
 冒烟测试通过后，再把同一条 `tools\start_worker.ps1` 命令放到 Windows 任务计划程序里。
 
+更完整的分布式测试矩阵见 [测试用例与验收规范](./testing.md)。
+
 ## 故障处理
 
 任务停在 `prepare_running`：GPU 机可能睡眠或后端退出。等待 lease 过期后重新启动 `-Role gpu` worker。

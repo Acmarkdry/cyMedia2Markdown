@@ -1,125 +1,104 @@
 <template>
     <div class="about-settings">
         <div class="about-highlight-tip">
-            🎉 感谢支持！关注下方公众号或小红书，获取最新版本更新以及反馈您的建议
+            本地优先的视频学习资料提取工作台
         </div>
-        <h2 style="margin-top:0;">AI 视频图文创作助手</h2>
-        <p style="font-size:1.05rem;line-height:1.7;">
-            AI 视频图文创作助手是一款 Web 工具, 基于 AI 大模型, 一键将视频和音频转化为各种风格的文档, 无需登录注册, 前后端本地部署，以极低的成本体验 AI 视频/音频转风格文档服务。
+        <h2>cyMedia2Markdown</h2>
+        <p>
+            当前版本面向课程视频、技术演讲和会议录屏整理：后端负责本地媒体处理、ASR、Codex CLI 生成和截图，前端负责任务入口、结果 review 和分布式队列看板。
         </p>
-        <div style="margin: 12px 0;">
-            项目地址：
-            <a href="https://github.com/hanshuaikang/AI-Media2Doc" target="_blank" style="color:#357aff;">
-                https://github.com/hanshuaikang/AI-Media2Doc
-            </a>
-        </div>
-        <div style="margin: 18px 0 0 0;">
-            <span>赞助作者：</span>
-            <a href="https://afdian.com/a/hanshu-github" target="_blank" style="color:#e67e22;font-weight:600;">
-                我的爱发电主页
-            </a>
-        </div>
-        <span style="color:#6b7280;font-size:0.95rem;">或者关注我的公众号或者小红书, 你的关注同样是我继续维护下去的动力!</span>
-        <div class="about-qrcodes">
-            <div class="about-qrcode-item">
-                <div class="about-qrcode-title">公众号</div>
-                <img :src="wechatQr" alt="公众号二维码" class="about-qrcode-img" />
+        <dl class="about-list">
+            <div>
+                <dt>运行规范</dt>
+                <dd>Python 固定 3.12.x，CPU/GPU 使用角色化虚拟环境。</dd>
             </div>
-            <div class="about-qrcode-item">
-                <div class="about-qrcode-title">小红书</div>
-                <img :src="xiaohongshuQr" alt="小红书二维码" class="about-qrcode-img" />
+            <div>
+                <dt>分布式入口</dt>
+                <dd><code>tools\start_worker.ps1 -Role cpu|gpu</code></dd>
             </div>
-        </div>
+            <div>
+                <dt>队列规范</dt>
+                <dd>队列目录独立于项目目录，只保存任务状态、日志和产物。</dd>
+            </div>
+            <div>
+                <dt>测试规范</dt>
+                <dd><code>docs\testing.md</code> 维护测试用例、验收标准和提交流程。</dd>
+            </div>
+        </dl>
+        <p class="about-note">
+            请只处理你拥有权利、已获授权，或依法可进行个人学习、研究、引用和整理的音视频内容。
+        </p>
     </div>
 </template>
-<script setup>
-const wechatQr = new URL('../../assets/wechat-qr.jpg', import.meta.url).href
-const xiaohongshuQr = new URL('../../assets/xiaohongshu-qr.png', import.meta.url).href
-</script>
+
 <style scoped>
 .about-settings {
     width: 100%;
-    max-width: 700px;
+    max-width: 760px;
     margin: 0;
     color: #1e293b;
     font-size: 15px;
     line-height: 1.7;
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border-radius: 12px;
-    padding: 24px 32px 24px 32px;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 24px 32px;
     text-align: left;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .about-highlight-tip {
-    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-    color: #d97706;
-    font-size: 16px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 15px;
     font-weight: 700;
-    border-left: 5px solid #f59e0b;
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin-bottom: 24px;
-    margin-top: 0;
-    letter-spacing: 0.2px;
-    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+    border-left: 4px solid #2563eb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
     text-align: left;
 }
 
-.about-settings a {
-    text-decoration: underline;
-    word-break: break-all;
+.about-settings h2 {
+    margin: 0 0 12px;
+    color: #0f172a;
+    font-size: 22px;
 }
 
-.about-qrcodes {
-    display: flex;
-    gap: 32px;
-    margin-top: 24px;
-    margin-bottom: 8px;
-    justify-content: flex-start;
-    align-items: flex-end;
+.about-settings p {
+    margin: 0 0 18px;
 }
 
-.about-qrcode-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.1);
-    border: 2px solid #dbeafe;
-    padding: 16px 20px 20px 20px;
-    transition: all 0.3s ease;
+.about-list {
+    display: grid;
+    gap: 12px;
+    margin: 0 0 18px;
 }
 
-.about-qrcode-item:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.2);
-    border-color: #3b82f6;
+.about-list div {
+    display: grid;
+    gap: 2px;
 }
 
-.about-qrcode-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #3b82f6;
-    margin-bottom: 12px;
-    letter-spacing: 0.5px;
+.about-list dt {
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
 }
 
-.about-qrcode-img {
-    width: 120px;
-    height: 120px;
-    border-radius: 16px;
-    border: 2px solid #fecaca;
-    background: #fff;
-    object-fit: contain;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
-    transition: all 0.3s ease;
+.about-list dd {
+    margin: 0;
+    color: #0f172a;
 }
 
-.about-qrcode-item:hover .about-qrcode-img {
-    border-color: #f87171;
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.2);
+.about-list code {
+    background: #f1f5f9;
+    border-radius: 6px;
+    padding: 2px 6px;
+    overflow-wrap: anywhere;
+}
+
+.about-note {
+    color: #64748b;
+    font-size: 14px;
 }
 </style>
