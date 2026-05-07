@@ -2,6 +2,7 @@
 import argparse
 from contextlib import contextmanager
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -260,15 +261,17 @@ def run_codex(out_dir: Path, timeout_seconds: int):
 
 
 def get_ffmpeg(root: Path) -> str:
-    return subprocess.check_output(
-        [
-            str(root / "backend" / ".venv" / "Scripts" / "python.exe"),
-            "-c",
-            "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())",
-        ],
-        text=True,
-        encoding="utf-8",
-    ).strip()
+    explicit = os.environ.get("M2M_FFMPEG") or os.environ.get("IMAGEIO_FFMPEG_EXE")
+    if explicit:
+        return explicit
+    try:
+        import imageio_ffmpeg
+    except ImportError as exc:
+        raise RuntimeError(
+            "imageio-ffmpeg is not installed in the active Python environment. "
+            "Run tools/setup_runtime.ps1 to rebuild the project-local 3.12 environments."
+        ) from exc
+    return imageio_ffmpeg.get_ffmpeg_exe()
 
 
 def fallback_marker_times(segments: list[dict], count: int) -> list[int]:

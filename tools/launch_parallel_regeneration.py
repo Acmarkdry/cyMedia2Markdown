@@ -14,7 +14,17 @@ from video_manifest import load_manifest, safe_output_name
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = ROOT / "output"
-DEFAULT_PYTHON = ROOT / "backend" / ".venv" / "Scripts" / "python.exe"
+
+
+def default_python() -> Path:
+    explicit = os.environ.get("M2M_PYTHON")
+    if explicit:
+        return Path(explicit)
+    for name in (".venv-cpu", ".venv-gpu"):
+        candidate = ROOT / name / "Scripts" / "python.exe"
+        if candidate.exists():
+            return candidate
+    return Path(sys.executable)
 
 
 def log_event(event: dict) -> None:
@@ -102,7 +112,7 @@ def resolve_jobs(args) -> list[dict]:
 
 
 def build_child_command(job: dict, args) -> list[str]:
-    python_exe = str(args.python or DEFAULT_PYTHON)
+    python_exe = str(args.python or default_python())
     command = [
         python_exe,
         str(ROOT / "tools" / "regenerate_video_notes_direct.py"),
@@ -291,7 +301,7 @@ def main() -> int:
 
     if args.jobs < 1:
         raise RuntimeError("--jobs must be >= 1")
-    python_exe = Path(args.python or DEFAULT_PYTHON)
+    python_exe = Path(args.python or default_python())
     if not args.dry_run and not python_exe.exists():
         raise RuntimeError(f"Python executable not found: {python_exe}")
     if hasattr(sys.stdout, "reconfigure"):
