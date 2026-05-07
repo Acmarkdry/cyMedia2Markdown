@@ -25,6 +25,8 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from video_manifest import ascii_slug, load_manifest, safe_output_name
 
@@ -33,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_API_BASE = "http://127.0.0.1:8080/api/v1"
 SCHEMA_VERSION = 1
 RUNNING_STATES = {"prepare_running", "codex_running"}
+REQUIRED_PYTHON_PREFIX = "Python 3.12."
 
 
 def now() -> float:
@@ -47,13 +50,146 @@ def worker_id(role: str) -> str:
     return f"{role}:{socket.gethostname()}:{os.getpid()}"
 
 
-def default_python(project_root: Path) -> Path:
-    candidate = project_root / "backend" / ".venv" / "Scripts" / "python.exe"
-    return candidate if candidate.exists() else Path(sys.executable)
+def run_command(command: Path | str, args: list[str] | None = None, timeout: int = 15) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            [str(command), *(args or ["--version"])],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+    output = (completed.stdout or completed.stderr or "").strip()
+    return completed.returncode == 0, output
+
+
+def executable_works(command: Path | str, args: list[str] | None = None, timeout: int = 15) -> bool:
+    ok, _ = run_command(command, args, timeout)
+    return ok
+
+
+def python_version_ok(python_exe: Path) -> tuple[bool, str]:
+    ok, output = run_command(python_exe, ["--version"])
+    return ok and output.startswith(REQUIRED_PYTHON_PREFIX), output
+
+
+def default_python(project_root: Path, role: str = "worker") -> Path:
+    role_envs = {
+        "prepare": [".venv-gpu"],
+        "codex": [".venv-cpu"],
+        "worker": [".venv-cpu", ".venv-gpu"],
+    }
+    names = role_envs.get(role, role_envs["worker"])
+    candidates = [
+        *(project_root / name / "Scripts" / "python.exe" for name in names),
+        Path(sys.executable),
+    ]
+    for candidate in candidates:
+        if candidate.exists() and python_version_ok(candidate)[0]:
+            return candidate
+    return Path(sys.executable)
 
 
 def resolve_project_root(value: str | Path | None) -> Path:
     return Path(value).resolve() if value else ROOT
+
+
+def is_unc_path(path: Path | str) -> bool:
+    return str(path).startswith("\\\\")
+
+
+def is_relative_to(child: Path, parent: Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def codex_command() -> str | None:
+    explicit = os.environ.get("CODEX_CLI_PATH")
+    if explicit:
+        return explicit
+    return shutil.which("codex.cmd") or shutil.which("codex.exe") or shutil.which("codex")
+
+
+def health_url_from_api_base(api_base: str) -> str:
+    base = api_base.rstrip("/")
+    if base.endswith("/api/v1"):
+        return f"{base[:-len('/api/v1')]}/health"
+    return f"{base}/health"
+
+
+def check_backend_health(api_base: str, timeout: int = 8) -> tuple[bool, str]:
+    url = health_url_from_api_base(api_base)
+    try:
+        with urlopen(url, timeout=timeout) as response:
+            if 200 <= response.status < 300:
+                return True, url
+            return False, f"{url} returned HTTP {response.status}"
+    except (OSError, URLError) as exc:
+        return False, f"{url} is not reachable: {exc}"
+
+
+def preflight_worker(args: argparse.Namespace, role: str) -> Path:
+    project_root = resolve_project_root(args.project_root)
+    queue_root = Path(args.queue_root).resolve()
+    problems: list[str] = []
+    warnings: list[str] = []
+
+    if not project_root.exists():
+        problems.append(f"project root does not exist: {project_root}")
+    for required in ["tools", "backend"]:
+        if not (project_root / required).exists():
+            problems.append(f"project root is missing {required}/: {project_root}")
+
+    if role == "prepare" and is_unc_path(project_root):
+        problems.append(
+            "GPU worker --project-root must be a local path on the GPU machine. "
+            "Keep --queue-root on SMB, but run project-root from the GPU host clone."
+        )
+    if project_root == queue_root or is_relative_to(project_root, queue_root):
+        problems.append(
+            "project-root must not be inside queue-root. Use a dedicated queue root such as "
+            "D:\\m2m_queue\\_queue, and pass the local project clone as --project-root."
+        )
+
+    python_exe = Path(args.python) if args.python else default_python(project_root, role)
+    if not python_exe.exists():
+        problems.append(f"python executable does not exist: {python_exe}")
+    else:
+        ok, version = python_version_ok(python_exe)
+        if not ok:
+            problems.append(
+                f"python executable must be Python 3.12.x: {python_exe} reported {version or 'unavailable'}"
+            )
+    args.python = python_exe
+
+    if role == "prepare":
+        ok, message = check_backend_health(args.api_base)
+        if not ok:
+            problems.append(f"backend health check failed: {message}")
+    if role == "codex":
+        command = codex_command()
+        if not command:
+            problems.append("Codex CLI is not on PATH and CODEX_CLI_PATH is not set.")
+        elif not executable_works(command, ["--version"]):
+            problems.append(f"Codex CLI cannot run: {command}")
+
+    payload = {
+        "event": "preflight",
+        "role": role,
+        "project_root": str(project_root),
+        "queue_root": str(queue_root),
+        "python": str(python_exe),
+        "warnings": warnings,
+    }
+    print(json.dumps(payload, ensure_ascii=False))
+    if problems:
+        raise SystemExit("Preflight failed:\n- " + "\n- ".join(problems))
+    return python_exe
 
 
 def ensure_layout(queue_root: Path) -> None:
@@ -578,7 +714,7 @@ def codex_output_ok(project_root: Path, slug: str) -> tuple[bool, str | None]:
 
 def run_prepare_job(queue_root: Path, job: dict[str, Any], owner: str, args: argparse.Namespace) -> None:
     project_root = resolve_project_root(args.project_root)
-    python_exe = Path(args.python or default_python(project_root))
+    python_exe = Path(args.python or default_python(project_root, "prepare"))
     manifest_path = write_single_manifest(queue_root, job)
     selector = str(job["video"].get("source_id") or job["video"]["slug"])
     log_path = command_log_path(queue_root, str(job["job_id"]), "prepare")
@@ -626,7 +762,7 @@ def run_prepare_job(queue_root: Path, job: dict[str, Any], owner: str, args: arg
 
 def run_codex_job(queue_root: Path, job: dict[str, Any], owner: str, args: argparse.Namespace) -> None:
     project_root = resolve_project_root(args.project_root)
-    python_exe = Path(args.python or default_python(project_root))
+    python_exe = Path(args.python or default_python(project_root, "codex"))
     slug = str(job["video"]["slug"])
     selector = str(job["video"].get("source_id") or slug)
     log_path = command_log_path(queue_root, str(job["job_id"]), "codex")
@@ -691,6 +827,7 @@ def run_codex_job(queue_root: Path, job: dict[str, Any], owner: str, args: argpa
 def prepare_worker(args: argparse.Namespace) -> int:
     queue_root = Path(args.queue_root).resolve()
     ensure_layout(queue_root)
+    preflight_worker(args, "prepare")
     owner = worker_id("prepare")
     if args.dry_run and args.once and not args.max_jobs:
         args.max_jobs = 1
@@ -712,6 +849,7 @@ def prepare_worker(args: argparse.Namespace) -> int:
 def codex_worker(args: argparse.Namespace) -> int:
     queue_root = Path(args.queue_root).resolve()
     ensure_layout(queue_root)
+    preflight_worker(args, "codex")
     owner = worker_id("codex")
     if args.dry_run and args.once and not args.max_jobs:
         args.max_jobs = max(1, args.jobs)
@@ -741,6 +879,14 @@ def codex_worker(args: argparse.Namespace) -> int:
             if args.once:
                 return 0
             time.sleep(args.idle_sleep)
+
+
+def worker(args: argparse.Namespace) -> int:
+    if args.role == "gpu":
+        return prepare_worker(args)
+    if args.role == "cpu":
+        return codex_worker(args)
+    raise SystemExit(f"Unsupported worker role: {args.role}")
 
 
 def status(args: argparse.Namespace) -> int:
@@ -851,28 +997,25 @@ def build_parser() -> argparse.ArgumentParser:
     enqueue_parser.add_argument("--replace", action="store_true", help="Replace existing job files for matching ids.")
     enqueue_parser.set_defaults(func=enqueue)
 
-    prepare_parser = subparsers.add_parser("prepare-worker", help="Run GPU/media preparation jobs.")
-    add_common_worker_args(prepare_parser)
-    prepare_parser.add_argument("--api-base", default=DEFAULT_API_BASE)
-    prepare_parser.add_argument("--poll-interval", type=int, default=30)
-    prepare_parser.add_argument("--media-timeout", type=int, default=1800)
-    prepare_parser.add_argument("--force-asr", action="store_true")
-    prepare_parser.set_defaults(func=prepare_worker)
-
-    codex_parser = subparsers.add_parser("codex-worker", help="Run Codex generation jobs.")
-    add_common_worker_args(codex_parser)
-    codex_parser.add_argument("--jobs", type=int, default=2)
-    codex_parser.add_argument("--chunk-minutes", type=int, default=12)
-    codex_parser.add_argument("--llm-timeout", type=int, default=3600)
-    codex_parser.add_argument("--max-tokens", type=int)
-    codex_parser.add_argument("--remarks", default="")
-    codex_parser.add_argument("--no-quality-retry", dest="quality_retry", action="store_false")
-    codex_parser.add_argument("--no-clear-screenshots", dest="clear_screenshots", action="store_false")
-    codex_parser.add_argument("--force-chunks", action="store_true")
-    codex_parser.add_argument("--cache-after-epoch", type=float)
-    codex_parser.add_argument("--merge-group-size", type=int, default=3)
-    codex_parser.add_argument("--merge-strategy", choices=["codex", "assemble"], default="assemble")
-    codex_parser.set_defaults(func=codex_worker, quality_retry=True, clear_screenshots=True)
+    worker_parser = subparsers.add_parser("worker", help="Run one standardized worker role.")
+    worker_parser.add_argument("--role", choices=["cpu", "gpu"], required=True)
+    add_common_worker_args(worker_parser)
+    worker_parser.add_argument("--api-base", default=DEFAULT_API_BASE)
+    worker_parser.add_argument("--poll-interval", type=int, default=30)
+    worker_parser.add_argument("--media-timeout", type=int, default=1800)
+    worker_parser.add_argument("--force-asr", action="store_true")
+    worker_parser.add_argument("--jobs", type=int, default=2)
+    worker_parser.add_argument("--chunk-minutes", type=int, default=12)
+    worker_parser.add_argument("--llm-timeout", type=int, default=3600)
+    worker_parser.add_argument("--max-tokens", type=int)
+    worker_parser.add_argument("--remarks", default="")
+    worker_parser.add_argument("--no-quality-retry", dest="quality_retry", action="store_false")
+    worker_parser.add_argument("--no-clear-screenshots", dest="clear_screenshots", action="store_false")
+    worker_parser.add_argument("--force-chunks", action="store_true")
+    worker_parser.add_argument("--cache-after-epoch", type=float)
+    worker_parser.add_argument("--merge-group-size", type=int, default=3)
+    worker_parser.add_argument("--merge-strategy", choices=["codex", "assemble"], default="assemble")
+    worker_parser.set_defaults(func=worker, quality_retry=True, clear_screenshots=True)
 
     status_parser = subparsers.add_parser("status", help="Print queue status.")
     status_parser.add_argument("--queue-root", required=True, type=Path)

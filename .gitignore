@@ -3,6 +3,8 @@
 logs
 output/
 .venv
+.venv-cpu/
+.venv-gpu/
 __pycache__
 *.pyc
 *.pyo

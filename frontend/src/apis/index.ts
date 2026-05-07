@@ -3,6 +3,7 @@ import * as markdownService from './markdownService'
 import * as uploadService from './uploadService'
 import * as chatService from './chatService'
 import * as healthService from './healthService'
+import * as queueService from './queueService'
 import * as secretsService from './secretsService' // 新增
 import httpService from './http'
 
@@ -12,6 +13,7 @@ export const { generateMarkdownText, generateVideoNotes } = markdownService
 export const { getAudioUploadUrl, uploadFile, extractMediaFromUrl, captureVideoScreenshot } = uploadService
 export const { sendChatMessage } = chatService
 export const { checkHealth } = healthService
+export const { getQueueStatus } = queueService
 export const { getSecrets } = secretsService // 新增
 
 // 导出所有服务
@@ -21,6 +23,7 @@ export {
   uploadService,
   chatService,
   healthService,
+  queueService,
   secretsService, // 新增
   httpService
 }
@@ -35,6 +38,7 @@ export default {
   upload: uploadService,
   chat: chatService,
   health: healthService,
+  queue: queueService,
   secrets: secretsService, // 新增
   http: httpService
 }

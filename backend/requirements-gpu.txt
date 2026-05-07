@@ -1,0 +1,6 @@
+# GPU prepare node runtime.
+# Prefer Python 3.12 for faster-whisper/CUDA wheel compatibility.
+-r requirements-cpu.txt
+faster-whisper==1.2.1
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.21.1.3

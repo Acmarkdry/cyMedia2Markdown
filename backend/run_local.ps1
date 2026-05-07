@@ -1,13 +1,16 @@
+param(
+  [ValidateSet("cpu", "gpu")]
+  [string]$Role = "gpu"
+)
+
 $ErrorActionPreference = "Stop"
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$VenvName = if ($Role -eq "gpu") { ".venv-gpu" } else { ".venv-cpu" }
+$Python = Join-Path $ProjectRoot "$VenvName\Scripts\python.exe"
 
-if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
-  Write-Error "Codex CLI not found. Install Codex CLI and run 'codex login' first."
+if (-not (Test-Path $Python)) {
+  & (Join-Path $ProjectRoot "tools\setup_runtime.ps1") -Role $Role
 }
 
-if (-not (Test-Path ".venv")) {
-  py -3 -m venv .venv
-}
-
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe app.py
+& $Python (Join-Path $PSScriptRoot "app.py")
+exit $LASTEXITCODE

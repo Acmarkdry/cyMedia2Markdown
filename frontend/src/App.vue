@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import VideoToMarkdown from './components/VideoToMarkdown/index.vue'
 import TaskDetail from './components/VideoToMarkdown/TaskDetail.vue'
+import QueueDashboard from './components/QueueDashboard.vue'
 import { eventBus } from './utils/eventBus'
 
 const activeMenu = ref('new-task')
@@ -52,6 +53,9 @@ onBeforeUnmount(() => {
         </template>
         <template v-else-if="activeMenu === 'new-task'">
           <VideoToMarkdown />
+        </template>
+        <template v-else-if="activeMenu === 'queue-dashboard'">
+          <QueueDashboard />
         </template>
         <template v-else>
         </template>

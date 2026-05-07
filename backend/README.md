@@ -9,7 +9,7 @@
 
 ## 1. 前置要求
 
-- Python 3.10+。
+- Python 3.12.x。项目根目录 `.python-version` 固定为 `3.12`，运行脚本会拒绝 3.13/3.11。
 - 已安装并登录 Codex CLI：
 
 ```bash
@@ -19,8 +19,8 @@ codex login
 
 ## 2. 安装依赖
 
-```bash
-pip install -r requirements.txt
+```powershell
+..\tools\setup_runtime.ps1 -Role gpu
 ```
 
 首次运行 `faster-whisper` 会下载模型文件。默认按 4070 Ti 这类本地显卡配置为 `large-v3 + cuda + float16`，优先保证转写质量。
@@ -51,13 +51,13 @@ Windows PowerShell 示例：
 $env:FASTER_WHISPER_MODEL="large-v3"
 $env:FASTER_WHISPER_DEVICE="cuda"
 $env:FASTER_WHISPER_COMPUTE_TYPE="float16"
-python app.py
+..\.venv-gpu\Scripts\python.exe app.py
 ```
 
 ## 4. 启动服务
 
 ```bash
-python app.py
+..\.venv-cpu\Scripts\python.exe app.py
 ```
 
 后端默认监听 `http://localhost:8080`，前端默认也会请求这个地址。

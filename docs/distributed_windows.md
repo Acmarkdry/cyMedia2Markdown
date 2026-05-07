@@ -1,110 +1,133 @@
-# Windows 局域网分布式处理指南
+# Windows 局域网分布式处理规范
 
-本文档说明如何在两台 Windows 机器上稳定协同运行 Media2Markdown：
+本文档是分布式视频笔记流程的运行契约。目标是让 CPU 机、GPU 机和前端看板按同一套规则协作，而不是依赖临时 agent 调度。
 
-- Mini PC：常开，负责共享队列、Codex CLI 生成、最终产物保存。
-- GPU PC：可休眠，负责下载/复用媒体、抽音频、本地 ASR 转写。
-- 共享队列：一个两台机器都能读写的 SMB 目录，例如 `\\MINIPC\m2m_queue`。
+## 核心原则
 
-分布式模式不会重写现有 ASR、截图、Codex 生成和质量检查逻辑。它只在外层增加任务队列、锁、lease、heartbeat、重试状态和跨机器产物同步。
+- Python 版本固定为 `3.12.x`，项目根目录 `.python-version` 写死 `3.12`。
+- 项目代码目录和队列目录必须分离。队列目录只放任务状态、日志和产物，不放项目源码。
+- CPU/GPU 使用同一个启动入口：`tools\start_worker.ps1 -Role cpu|gpu`。
+- GPU 机的 `-ProjectRoot` 必须是 GPU 本机磁盘上的项目克隆，不能是 SMB/UNC 路径。
+- CPU 机负责 Codex CLI 生成、截图、HTML 渲染和质量检查；GPU 机负责媒体下载/复用、抽音频和本地 ASR。
+- 所有机器先跑 `tools\m2m_doctor.py` 自检，失败就修环境，不直接开 worker 碰运气。
 
-## 适用场景
+## 标准目录
 
-这个模式适合以下机器组合：
-
-- 一台常开的 Mini PC，可以长期运行 Codex CLI。
-- 一台带 NVIDIA 显卡的 Windows 主机，可以跑 `faster-whisper` CUDA 转写，但可能睡眠或临时关机。
-- 两台机器在同一局域网内，可以访问同一个 SMB 共享目录。
-
-如果只有一台机器，继续使用 `tools\batch_video_notes.cmd` 或 `tools\parallel_regenerate.cmd` 即可。
-
-## 工作流
+Mini PC 作为共享宿主时，建议目录如下：
 
 ```text
-manifest
-  |
-  v
-enqueue 写入共享队列
-  |
-  v
-GPU prepare-worker
-  - 下载/复用视频
-  - 抽音频
-  - 本地 ASR
-  - 写出 status.json / transcript.json / codex_prompt.md
-  - 发布 output/<slug>/ 和 media/<video_filename>
-  |
-  v
-Mini PC codex-worker
-  - 导入准备好的 output 和 video 文件
-  - 调用 Codex CLI 生成笔记
-  - 截图、渲染 HTML、质量检查
-  - 发布 notes.md / notes.html / screenshots / quality.json
+D:\StudyReference\m2m_queue\
+  AI-Media2Doc\          项目源码，本机运行 CPU worker 和前端
+  _queue\                分布式共享队列
+    jobs\                每个视频一个任务 JSON
+    artifacts\           prepare/codex 阶段产物
+    logs\                worker 命令日志和事件日志
+    work\manifests\      worker 自动拆出的单视频 manifest
 ```
 
-## 队列目录结构
-
-建议在 Mini PC 上创建共享目录：
-
-```powershell
-mkdir D:\m2m_queue
-```
-
-然后把它共享为：
+SMB 只共享父目录，例如：
 
 ```text
 \\MINIPC\m2m_queue
 ```
 
-分布式脚本会在共享目录下维护这些子目录：
+其他机器访问队列时使用：
 
 ```text
-\\MINIPC\m2m_queue\
-  jobs\                  每个视频一个 JSON 任务文件
-  artifacts\             准备阶段和最终阶段的产物包
-  logs\                  命令日志和队列事件日志
-  work\manifests\        worker 自动生成的单视频 manifest
+\\MINIPC\m2m_queue\_queue
 ```
 
-每个任务 JSON 是持久状态机：
+不要再把 `\\MINIPC\m2m_queue\AI-Media2Doc` 当作 GPU 机的 `-ProjectRoot`。GPU 机应在自己的磁盘上放一份项目，例如：
 
 ```text
-queued -> prepare_running -> prepared -> codex_running -> done
-                  |                         |
-                  v                         v
-             prepare_failed            codex_failed
+D:\Local\AI-Media2Doc
 ```
 
-运行中的任务会记录：
+## 环境安装
 
-- `owner`：当前 worker 标识。
-- `lease_until`：租约过期时间。
-- `last_heartbeat`：最近一次心跳时间。
-- `attempts`：prepare/codex 各自尝试次数。
-- `last_error`：最近一次失败原因和日志路径。
+在项目根目录执行。脚本只接受 Python `3.12`，会拒绝其他大版本/小版本。
 
-如果 GPU PC 睡眠、断电或进程退出，任务会停留在 `prepare_running`。等 `lease_until` 过期后，worker 可以重新认领并继续处理。
+CPU 机：
 
-## 两台机器准备
+```powershell
+tools\setup_runtime.ps1 -Role cpu
+```
 
-两台机器都保留一份 `AI-Media2Doc` 工作目录，路径可以不同，但运行命令时要用各自机器上的真实路径传给 `--project-root`。
+GPU 机：
 
-GPU PC 需要：
+```powershell
+tools\setup_runtime.ps1 -Role gpu
+```
 
-- 后端依赖已安装。
-- CUDA 版 `faster-whisper` 能正常运行。
-- 后端服务已启动，例如 `http://127.0.0.1:8080`。
-- 能访问 `\\MINIPC\m2m_queue`。
+前端：
 
-Mini PC 需要：
+```powershell
+tools\setup_runtime.ps1 -Role frontend
+```
 
-- Codex CLI 已安装并登录。
-- 后端 Python 依赖已安装，因为 Codex worker 会复用截图、HTML 渲染和质量检查逻辑。
-- 能访问 `\\MINIPC\m2m_queue`。
+一次性安装全部角色也可以：
 
-## 入队任务
+```powershell
+tools\setup_runtime.ps1 -Role all
+```
 
-manifest 格式仍然使用现有批处理清单：
+生成的环境固定为：
+
+```text
+.venv-cpu\       CPU/Codex worker 依赖
+.venv-gpu\       GPU/ASR worker 依赖
+frontend\node_modules\
+```
+
+## 自检
+
+CPU 机：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe tools\m2m_doctor.py `
+  --role cpu `
+  --queue-root D:\StudyReference\m2m_queue\_queue
+```
+
+GPU 机：
+
+```powershell
+.\.venv-gpu\Scripts\python.exe tools\m2m_doctor.py `
+  --role gpu `
+  --project-root D:\Local\AI-Media2Doc `
+  --queue-root \\MINIPC\m2m_queue\_queue `
+  --api-base http://127.0.0.1:8080/api/v1
+```
+
+doctor 会检查：
+
+- Python 是否为 `3.12.x`。
+- `.venv-cpu` / `.venv-gpu` 是否能运行。
+- `ProjectRoot` 是否存在 `backend/ frontend/ tools/`。
+- `ProjectRoot` 是否错误地放进了 `QueueRoot`。
+- GPU 机是否错误地用 SMB 路径作为 `ProjectRoot`。
+- CPU 机是否能执行 Codex CLI。
+- GPU 机后端健康检查是否可达。
+
+## 启动后端
+
+GPU 机需要先启动后端，让 prepare worker 调用本地下载、抽音频和 ASR 接口：
+
+```powershell
+cd D:\Local\AI-Media2Doc\backend
+..\.venv-gpu\Scripts\python.exe app.py
+```
+
+Mini PC 如果只跑 CPU worker，不需要为了分布式队列启动后端；前端看板需要后端时再启动：
+
+```powershell
+cd D:\StudyReference\m2m_queue\AI-Media2Doc\backend
+..\.venv-cpu\Scripts\python.exe app.py
+```
+
+## 入队
+
+manifest 继续沿用现有格式：
 
 ```json
 {
@@ -118,189 +141,122 @@ manifest 格式仍然使用现有批处理清单：
 }
 ```
 
-在任意一台机器执行：
+入队命令：
 
 ```powershell
 tools\distributed_enqueue.cmd `
-  --queue-root \\MINIPC\m2m_queue `
+  --queue-root D:\StudyReference\m2m_queue\_queue `
   --manifest output\course.json
 ```
 
-重复执行入队命令不会覆盖已有状态，只会更新任务里的视频元数据。需要强制替换任务文件时再加 `--replace`。
+重复入队不会覆盖已有状态，只会更新视频元数据。确实要替换任务文件时再加 `--replace`。
 
-## 运行 GPU 准备 worker
+## 启动 Worker
 
-在 4070Ti 机器上先启动后端，然后执行：
+CPU/GPU 都使用同一个入口，只通过 `-Role` 区分行为。
 
-```powershell
-tools\distributed_prepare_worker.cmd `
-  --queue-root \\MINIPC\m2m_queue `
-  --project-root D:\StudyResource\Media2Markdown\AI-Media2Doc `
-  --api-base http://127.0.0.1:8080/api/v1 `
-  --media-timeout 1800
-```
-
-prepare worker 一次只处理一个视频，适合单 GPU。它会调用：
+Mini PC 启动 CPU worker：
 
 ```powershell
-tools\batch_video_notes.py --skip-codex
+tools\start_worker.ps1 `
+  -Role cpu `
+  -QueueRoot D:\StudyReference\m2m_queue\_queue `
+  -Jobs 3 `
+  -MergeStrategy assemble
 ```
 
-成功后会把这些内容发布到共享队列：
+GPU 机启动 GPU worker：
 
-- `output/<slug>/status.json`
-- `output/<slug>/transcript.json`
-- `output/<slug>/transcript.srt`
-- `output/<slug>/codex_prompt.md`
-- `backend/local_storage/media/<video_filename>`
+```powershell
+tools\start_worker.ps1 `
+  -Role gpu `
+  -ProjectRoot D:\Local\AI-Media2Doc `
+  -QueueRoot \\MINIPC\m2m_queue\_queue `
+  -ApiBase http://127.0.0.1:8080/api/v1
+```
 
 常用参数：
 
 ```text
---once                    只扫描并处理一轮
---max-jobs 3              本次最多处理 3 个任务
---lease-seconds 1800      单个任务租约时间
---heartbeat-interval 60   心跳刷新间隔
---force-asr               忽略已有 transcript，强制重新转写
+-Once                 只处理一轮，适合冒烟测试
+-DryRun               认领后打印命令并释放任务，不真正执行
+-MaxJobs 3            本次最多处理 3 个任务
+-LeaseSeconds 1800    单任务租约时间
+-HeartbeatInterval 60 心跳刷新间隔
+-ForceAsr             GPU 角色强制重新转写
+-Jobs 3               CPU 角色并发 Codex 任务数
+-NoQualityRetry       CPU 角色关闭质量重试
 ```
 
-## 运行 Mini PC Codex worker
-
-在 Mini PC 上执行：
+底层 Python 命令同样统一：
 
 ```powershell
-tools\distributed_codex_worker.cmd `
-  --queue-root \\MINIPC\m2m_queue `
-  --project-root D:\StudyResource\Media2Markdown\AI-Media2Doc `
-  --jobs 3 `
-  --merge-strategy assemble `
-  --no-clear-screenshots `
-  --llm-timeout 3600
+.\.venv-cpu\Scripts\python.exe tools\distributed_video_notes.py worker --role cpu --queue-root D:\StudyReference\m2m_queue\_queue
+.\.venv-gpu\Scripts\python.exe tools\distributed_video_notes.py worker --role gpu --queue-root \\MINIPC\m2m_queue\_queue
 ```
 
-Codex worker 会先把准备好的 `output/<slug>/` 和视频文件导入 Mini PC 本地项目目录，再调用：
+## 状态与重试
+
+查看状态：
 
 ```powershell
-tools\regenerate_video_notes_direct.py --slug <source_id>
+tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue
+tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue --json
 ```
 
-它会验证这些结果：
-
-- `notes.md` 存在。
-- `notes.html` 存在。
-- `backend_video_notes_quality.json` 存在。
-- `quality.passed` 为 `true`。
-
-通过后任务进入 `done`，并把最终 `output/<slug>/` 回写到共享队列的 `artifacts/` 目录。
-
-建议先用 `--jobs 2`，稳定后再增加到 `3`。如果长视频很多，默认推荐 `--merge-strategy assemble`，它比最后再做一次大 Codex 合并更稳定。
-
-## 查看状态
-
-普通表格输出：
-
-```powershell
-tools\distributed_status.cmd --queue-root \\MINIPC\m2m_queue
-```
-
-JSON 输出：
-
-```powershell
-tools\distributed_status.cmd --queue-root \\MINIPC\m2m_queue --json
-```
-
-日志位置：
-
-```text
-\\MINIPC\m2m_queue\logs\
-```
-
-典型日志包括：
-
-- `<job_id>_prepare_<timestamp>.log`
-- `<job_id>_codex_<timestamp>.log`
-- `<job_id>.jsonl`
-
-## 重试任务
-
-重试 ASR/媒体准备失败的任务：
+重试 prepare 阶段：
 
 ```powershell
 tools\distributed_video_notes.cmd requeue `
-  --queue-root \\MINIPC\m2m_queue `
+  --queue-root D:\StudyReference\m2m_queue\_queue `
   --stage prepare `
   --job BVxxxxxxxxxx
 ```
 
-重试 Codex 生成失败的任务：
+重试 Codex 阶段：
 
 ```powershell
 tools\distributed_video_notes.cmd requeue `
-  --queue-root \\MINIPC\m2m_queue `
+  --queue-root D:\StudyReference\m2m_queue\_queue `
   --stage codex `
   --job BVxxxxxxxxxx
 ```
 
 只在明确要把已完成或正在运行的任务拉回早期状态时使用 `--force`。
 
-## 推荐默认值
+## 前端看板
 
-GPU prepare worker：
+后端 `/api/v1/queue/status` 会返回运行契约，包括：
 
-```text
---lease-seconds 1800
---heartbeat-interval 60
---media-timeout 1800
+- Python 规范。
+- 项目根目录。
+- 队列根目录。
+- CPU/GPU 虚拟环境位置。
+- 标准安装、自检和启动命令。
+
+前端分布式看板会直接展示这些信息，方便 review 当前机器是否按规范运行。
+
+## 冒烟测试
+
+建议先用一个短视频验证端到端：
+
+```powershell
+tools\distributed_enqueue.cmd --queue-root D:\StudyReference\m2m_queue\_queue --manifest output\smoke.json
+tools\start_worker.ps1 -Role gpu -ProjectRoot D:\Local\AI-Media2Doc -QueueRoot \\MINIPC\m2m_queue\_queue -Once
+tools\start_worker.ps1 -Role cpu -QueueRoot D:\StudyReference\m2m_queue\_queue -Once -Jobs 1
+tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue
 ```
 
-Mini PC Codex worker：
-
-```text
---jobs 2 或 3
---merge-strategy assemble
---no-clear-screenshots
---llm-timeout 3600
-```
-
-如果 Codex CLI 偶发中断，直接重试 Codex 阶段即可。`direct_chunks/` 缓存会随 `output/<slug>/` 一起同步，通常不需要从头生成。
+冒烟测试通过后，再把同一条 `tools\start_worker.ps1` 命令放到 Windows 任务计划程序里。
 
 ## 故障处理
 
-### GPU 机器睡眠
+任务停在 `prepare_running`：GPU 机可能睡眠或后端退出。等待 lease 过期后重新启动 `-Role gpu` worker。
 
-现象：任务停在 `prepare_running`。
+任务停在 `codex_running`：CPU 机 Codex CLI 可能中断。等待 lease 过期后重新启动 `-Role cpu` worker，必要时 requeue codex 阶段。
 
-处理：等待 `lease_until` 过期后重新启动 prepare worker。任务会重新认领。如果本地已有 `transcript.json`，现有脚本会复用缓存。
+报错 `ProjectRoot must not live inside QueueRoot`：项目源码和 `_queue` 放混了。移动 `_queue` 到项目目录外，或重新传入正确的 `-QueueRoot`。
 
-### Mini PC 缺少视频文件
+报错 `GPU worker ProjectRoot must be a local clone`：GPU 机使用了 SMB 项目路径。改为 GPU 本机磁盘路径，只让 `-QueueRoot` 指向 SMB。
 
-现象：Codex worker 在调用 Codex 前失败，错误包含 `Missing artifact media` 或 `Cached video file is missing`。
-
-处理：检查 `\\MINIPC\m2m_queue\artifacts\<job_id>\media\` 是否存在视频文件；重新运行 prepare worker 或手动修复共享目录权限后重试 codex 阶段。
-
-### Codex 生成质量不通过
-
-现象：任务进入 `codex_failed`，但命令可能 exit code 为 0。
-
-原因：稳定模式要求 `backend_video_notes_quality.json` 中 `quality.passed` 为 `true`。
-
-处理：查看对应 codex 日志，必要时调整 `--remarks`、`--chunk-minutes` 或 `--merge-strategy assemble` 后重试。
-
-### 共享目录权限问题
-
-现象：worker 无法创建 `jobs/*.lock`、无法写入 `artifacts/` 或 `logs/`。
-
-处理：确认两台机器对 `\\MINIPC\m2m_queue` 都有读写权限。不要把队列放到 OneDrive 同步目录里，避免文件锁和延迟同步导致状态混乱。
-
-## 端到端冒烟测试
-
-建议先用一个短视频 manifest 验证：
-
-```powershell
-tools\distributed_enqueue.cmd --queue-root \\MINIPC\m2m_queue --manifest output\smoke.json
-tools\distributed_prepare_worker.cmd --queue-root \\MINIPC\m2m_queue --project-root D:\StudyResource\Media2Markdown\AI-Media2Doc --once
-tools\distributed_codex_worker.cmd --queue-root \\MINIPC\m2m_queue --project-root D:\StudyResource\Media2Markdown\AI-Media2Doc --once --jobs 1 --merge-strategy assemble
-tools\distributed_status.cmd --queue-root \\MINIPC\m2m_queue
-```
-
-冒烟测试通过后，再把 prepare worker 和 codex worker 放到 Windows 任务计划程序里开机自启或登录自启。
+报错 `python executable must be Python 3.12.x`：删除错误虚拟环境，重新运行 `tools\setup_runtime.ps1 -Role cpu|gpu`。

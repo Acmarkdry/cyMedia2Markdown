@@ -1,4 +1,4 @@
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.12
 
 FROM python:${PYTHON_VERSION}-slim AS base
 
@@ -16,7 +16,7 @@ FROM base AS builder
 
 WORKDIR /
 
-COPY requirements.txt .
+COPY requirements*.txt ./
 
 RUN set -ex && \
     mkdir ~/.pip && \

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
 import { ElMenu, ElMenuItem, ElAvatar, ElTag, ElIcon, ElEmpty, ElMessage, ElMessageBox } from 'element-plus'
-import { VideoCameraFilled, Tickets, Document, Plus, ArrowRight, Delete } from '@element-plus/icons-vue'
+import { VideoCameraFilled, Tickets, Document, Plus, ArrowRight, Delete, DataLine } from '@element-plus/icons-vue'
 import { getAllTasks, deleteTask } from '../utils/db'
 import { eventBus } from '../utils/eventBus'
 import Settings from './Settings/Settings.vue'
@@ -169,6 +169,15 @@ const handleDeleteTask = async (event, task) => {
                         <Plus />
                     </el-icon>
                     <span>新建任务</span>
+                </div>
+            </el-menu-item>
+
+            <el-menu-item index="queue-dashboard" class="menu-item">
+                <div class="menu-item-content">
+                    <el-icon class="menu-icon-new">
+                        <DataLine />
+                    </el-icon>
+                    <span>队列看板</span>
                 </div>
             </el-menu-item>
 
