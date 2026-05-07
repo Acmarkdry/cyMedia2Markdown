@@ -1,0 +1,4 @@
+interface:
+  display_name: "Media2Markdown 视频笔记"
+  short_description: "批量处理本地视频和B站课程，生成学习笔记字幕与截图"
+  default_prompt: "Use $media2markdown-video-notes to process a Bilibili playlist into high-density Markdown notes with screenshots."
