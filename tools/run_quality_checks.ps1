@@ -33,11 +33,16 @@ Invoke-Check "Python compile" {
         (Join-Path $ProjectRoot "tools\launch_parallel_regeneration.py") `
         (Join-Path $ProjectRoot "tools\regenerate_video_notes_direct.py") `
         (Join-Path $ProjectRoot "tools\rebuild_note_assets.py") `
-        (Join-Path $ProjectRoot "tools\rename_output_dirs.py")
+        (Join-Path $ProjectRoot "tools\rename_output_dirs.py") `
+        (Join-Path $ProjectRoot "tools\validate_video_outputs.py")
 }
 
 Invoke-Check "Backend import" {
     & $Python -c "import sys; sys.path.insert(0, r'$ProjectRoot\backend'); import app; print(app.app.title)"
+}
+
+Invoke-Check "Unit tests" {
+    & $Python -m unittest discover -s (Join-Path $ProjectRoot "tests") -p "test_*.py"
 }
 
 Invoke-Check "Doctor cpu" {

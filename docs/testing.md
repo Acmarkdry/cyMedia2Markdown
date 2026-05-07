@@ -29,6 +29,7 @@ tools\run_quality_checks.ps1 -SkipFrontendBuild
 默认检查项：
 
 - Python 入口是否为 `3.12.x`。
+- `tests/` 下的自动化 unittest 是否通过。
 - `tools\m2m_doctor.py --role cpu` 是否通过。
 - `tools\m2m_doctor.py --role frontend` 是否通过。
 - 关键 Python 文件是否可编译。
@@ -36,6 +37,23 @@ tools\run_quality_checks.ps1 -SkipFrontendBuild
 - `batch_video_notes.cmd`、`parallel_regenerate.cmd` 是否可打印 help。
 - 队列状态命令是否能读取标准 `_queue`。
 - 前端 `npm run build` 是否成功。
+
+## 自动化覆盖现状
+
+已自动化：
+
+- Manifest 解析、Windows 文件名清洗、重复 slug 去重、选择器过滤。
+- 队列看板数据归一化、p 序排序、lease 过期判断、运行契约命令。
+- 分布式队列入队、认领、dry-run 释放、prepare/codex 完成状态、artifact 导入导出。
+- Doctor 对 Python 3.12、队列目录分离、GPU SMB ProjectRoot 禁止策略的报告。
+- 生成产物校验：必需文件、质量文件、未收尾 `#image[]`、纯数字图片 alt、缺失截图。
+
+未自动化，需人工或专用机器执行：
+
+- 真实 B 站/公开视频下载。
+- 真实 GPU `faster-whisper` 转写。
+- 真实 Codex CLI 长视频生成。
+- 浏览器交互、队列看板视觉布局和移动端布局。
 
 ## L0 静态与契约用例
 
@@ -101,12 +119,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
   tools\launch_parallel_regeneration.py `
   tools\regenerate_video_notes_direct.py `
   tools\rebuild_note_assets.py `
-  tools\rename_output_dirs.py
+  tools\rename_output_dirs.py `
+  tools\validate_video_outputs.py
 ```
 
 期望：命令 exit code 为 0。
 
-### TC-L1-002 后端导入
+### TC-L1-002 自动化单元测试
+
+步骤：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+```
+
+期望：
+
+- `test_video_manifest.py` 覆盖 manifest 解析和选择器。
+- `test_queue_status.py` 覆盖队列看板归一化。
+- `test_distributed_queue.py` 覆盖入队、认领、完成和 artifact 流转。
+- `test_doctor_contract.py` 覆盖运行契约失败与成功路径。
+- `test_validate_outputs.py` 覆盖生成产物质量校验。
+- 命令 exit code 为 0。
+
+### TC-L1-003 后端导入
 
 步骤：
 
@@ -116,7 +152,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
 
 期望：输出 `AI Media2Doc API`。
 
-### TC-L1-003 Doctor 自检
+### TC-L1-004 Doctor 自检
 
 步骤：
 
@@ -131,7 +167,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
 - CPU 检查能识别 Codex CLI。
 - Frontend 检查能识别 node/npm。
 
-### TC-L1-004 前端构建
+### TC-L1-005 前端构建
 
 步骤：
 
@@ -266,32 +302,16 @@ tools\parallel_regenerate.cmd --slug smoke_video --jobs 1 --merge-strategy assem
 步骤：
 
 ```powershell
-@'
-from pathlib import Path
-import json, re, sys
-root = Path("output")
-problems = []
-for quality_path in root.glob("*/backend_video_notes_quality.json"):
-    out = quality_path.parent
-    quality = json.loads(quality_path.read_text(encoding="utf-8")).get("quality") or {}
-    if quality.get("passed") is not True:
-        problems.append((out.name, "quality-failed", quality.get("problems")))
-    notes = out / "notes.md"
-    if not notes.exists():
-        problems.append((out.name, "missing-notes"))
-        continue
-    text = notes.read_text(encoding="utf-8", errors="replace")
-    if "#image[" in text:
-        problems.append((out.name, "unfinalized-image-marker"))
-    for rel in re.findall(r"\]\((screenshots/[^)]+)\)", text):
-        if not (out / rel).exists():
-            problems.append((out.name, "missing-screenshot", rel))
-print("problems", problems)
-sys.exit(1 if problems else 0)
-'@ | .\.venv-cpu\Scripts\python.exe -
+.\.venv-cpu\Scripts\python.exe tools\validate_video_outputs.py --output-root output
 ```
 
-期望：输出 `problems []`。
+期望：输出 `video output validation: OK`。
+
+只检查某个视频：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe tools\validate_video_outputs.py --output-root output --source-id BVxxxxxxxxxx
+```
 
 ## L4 前端验收用例
 
