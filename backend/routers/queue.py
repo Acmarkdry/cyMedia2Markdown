@@ -222,18 +222,37 @@ def state_summary(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def runtime_contract(queue_root: Path) -> dict[str, Any]:
     share_root = queue_root.parent
     project_name = PROJECT_ROOT.name
+    backend_root = PROJECT_ROOT / "backend"
+    queue_layout = {
+        "jobs": str(queue_root / "jobs"),
+        "artifacts": str(queue_root / "artifacts"),
+        "logs": str(queue_root / "logs"),
+        "work": str(queue_root / "work"),
+    }
+    backend_storage = {
+        "uploads": str(backend_root / env.LOCAL_UPLOAD_DIR),
+        "media": str(backend_root / env.LOCAL_MEDIA_DIR),
+        "screenshots": str(backend_root / env.LOCAL_SCREENSHOT_DIR),
+        "logs": str(backend_root / env.LOG_DIR),
+    }
+    storage_contract = {
+        "share_root": str(share_root),
+        "project_root": str(PROJECT_ROOT),
+        "queue_root": str(queue_root),
+        "final_output_root": str(PROJECT_ROOT / "output"),
+        "backend_storage": backend_storage,
+        "queue_layout": queue_layout,
+        "artifact_output_pattern": str(queue_root / "artifacts" / "<job_id>" / "output" / "<video_slug>"),
+        "artifact_media_pattern": str(queue_root / "artifacts" / "<job_id>" / "media" / "<video_file>"),
+    }
     return {
         "required_python": REQUIRED_PYTHON,
         "project_root": str(PROJECT_ROOT),
         "queue_root": str(queue_root),
         "share_root": str(share_root),
-        "queue_layout": {
-            "jobs": str(queue_root / "jobs"),
-            "artifacts": str(queue_root / "artifacts"),
-            "logs": str(queue_root / "logs"),
-            "work": str(queue_root / "work"),
-        },
-        "local_media_dir": str(PROJECT_ROOT / "backend" / env.LOCAL_MEDIA_DIR),
+        "queue_layout": queue_layout,
+        "storage_contract": storage_contract,
+        "local_media_dir": backend_storage["media"],
         "cpu_venv": str(PROJECT_ROOT / ".venv-cpu"),
         "gpu_venv": str(PROJECT_ROOT / ".venv-gpu"),
         "current_python": sys.version.split()[0],

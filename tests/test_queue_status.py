@@ -56,6 +56,11 @@ class QueueStatusTests(unittest.TestCase):
     def test_runtime_contract_exposes_unified_worker_commands(self) -> None:
         contract = queue.runtime_contract(Path(r"D:\StudyReference\m2m_queue\_queue"))
         self.assertEqual(contract["required_python"], "3.12.x")
+        self.assertEqual(contract["storage_contract"]["queue_root"], r"D:\StudyReference\m2m_queue\_queue")
+        self.assertEqual(contract["storage_contract"]["queue_layout"]["jobs"], r"D:\StudyReference\m2m_queue\_queue\jobs")
+        self.assertTrue(contract["storage_contract"]["final_output_root"].endswith(r"AI-Media2Doc\output"))
+        self.assertTrue(contract["storage_contract"]["backend_storage"]["media"].endswith(r"backend\local_storage\media"))
+        self.assertIn(r"_queue\artifacts\<job_id>\output\<video_slug>", contract["storage_contract"]["artifact_output_pattern"])
         self.assertIn("start_worker.ps1 -Role cpu", contract["commands"]["start_cpu"])
         self.assertIn("start_worker.ps1 -Role gpu", contract["commands"]["start_gpu"])
 

@@ -31,9 +31,11 @@ npm run build
 侧边栏“队列看板”读取 `/api/v1/queue/status`，展示：
 
 - Python 版本和 CPU/GPU 虚拟环境。
-- 项目根目录、队列根目录和标准启动命令。
+- 项目根目录、队列根目录、最终输出目录、本地缓存目录和标准启动命令。
 - 当前运行任务、待办任务、失败任务和最近事件。
 - 每个任务的 prepare/codex 阶段状态、租约和心跳。
+
+看板中的目录信息来自 `/api/v1/queue/status` 的 `contract.storage_contract`，应与根目录 README 和 `docs/distributed_windows.md` 保持一致。
 
 ## 测试
 

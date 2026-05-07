@@ -67,7 +67,28 @@ $env:FASTER_WHISPER_COMPUTE_TYPE="int8"
 - `/api/v1/files/*`：上传、URL 媒体下载、音频抽取、截图。
 - `/api/v1/audio/*`：本地 ASR 任务。
 - `/api/v1/llm/*`：Codex CLI 生成、视频笔记 prompt、质量检查。
-- `/api/v1/queue/status`：分布式队列看板数据和运行契约。
+- `/api/v1/queue/status`：分布式队列看板数据和运行契约，其中 `contract.storage_contract` 是目录存储的机器可读标准。
+
+## 存储责任
+
+后端本机只直接读写项目目录内的本地缓存和输出：
+
+```text
+backend/local_storage/media/        本机媒体缓存
+backend/local_storage/uploads/      上传临时文件
+backend/local_storage/screenshots/  后端截图缓存
+backend/local_storage/logs/         后端服务日志
+../output/                          本机最终笔记、截图、HTML 和质量报告
+```
+
+分布式 worker 的任务状态、跨机器产物和 worker 日志只写到项目目录外的 `_queue`：
+
+```text
+../_queue/jobs/
+../_queue/artifacts/
+../_queue/logs/
+../_queue/work/manifests/
+```
 
 ## 日志
 
@@ -77,6 +98,9 @@ $env:FASTER_WHISPER_COMPUTE_TYPE="int8"
 backend/local_storage/logs/backend.log
 output/parallel_<视频标题>_<timestamp>.log
 output/parallel_summary_<timestamp>.json
+D:\StudyReference\m2m_queue\_queue\logs\<job_id>_prepare_<timestamp>.log
+D:\StudyReference\m2m_queue\_queue\logs\<job_id>_codex_<timestamp>.log
+D:\StudyReference\m2m_queue\_queue\logs\<job_id>.jsonl
 ```
 
 排查顺序：

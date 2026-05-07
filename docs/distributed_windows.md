@@ -17,13 +17,36 @@ Mini PC 作为共享宿主时，建议目录如下：
 
 ```text
 D:\StudyReference\m2m_queue\
-  AI-Media2Doc\          项目源码，本机运行 CPU worker 和前端
-  _queue\                分布式共享队列
-    jobs\                每个视频一个任务 JSON
-    artifacts\           prepare/codex 阶段产物
-    logs\                worker 命令日志和事件日志
-    work\manifests\      worker 自动拆出的单视频 manifest
+  AI-Media2Doc\                    项目源码，本机运行 CPU worker 和前端
+    output\                        本机最终笔记、截图、HTML 和质量报告
+    backend\local_storage\         本机后端缓存
+      media\                       URL 下载或上传后的本机媒体缓存
+      uploads\                     上传临时文件
+      screenshots\                 后端截图缓存
+      logs\                        后端服务日志
+  _queue\                          分布式共享队列
+    jobs\                          每个视频一个任务 JSON
+    artifacts\                     prepare/codex 阶段跨机器交换产物
+      <job_id>\output\<video_slug>\ output\<video_slug> 的队列副本
+      <job_id>\media\<video_file>   prepare 阶段导出的媒体副本
+    logs\                          worker 命令日志和事件日志
+    work\manifests\                worker 自动拆出的单视频 manifest
 ```
+
+父目录下不再使用单独的 `logs\`。旧流程留下的父级 `logs\` 应移动到 `_queue\logs\legacy_*` 后清空，避免后续排查时同时看两套日志。
+
+目录职责必须固定：
+
+| 路径 | 责任 | 是否共享 |
+| --- | --- | --- |
+| `AI-Media2Doc\output\` | 当前机器可直接 review 的最终学习资料 | 不作为 worker 协作入口 |
+| `AI-Media2Doc\backend\local_storage\media\` | 当前机器后端可访问的媒体缓存 | 不跨机器直接引用 |
+| `_queue\jobs\` | 任务状态、租约、重试次数和路径元数据 | 共享 |
+| `_queue\artifacts\` | GPU prepare 和 CPU codex 之间交换输出与媒体副本 | 共享 |
+| `_queue\logs\` | worker stdout/stderr、命令日志、任务事件 JSONL | 共享 |
+| `_queue\work\manifests\` | worker 临时生成的单视频 manifest | 共享 |
+
+队列看板和后端 API 以 `/api/v1/queue/status` 的 `contract.storage_contract` 作为机器可读契约；README 和本文档必须与该字段保持一致。
 
 SMB 只共享父目录，例如：
 
@@ -231,6 +254,7 @@ tools\distributed_video_notes.cmd requeue `
 - Python 规范。
 - 项目根目录。
 - 队列根目录。
+- 最终输出目录、后端本地缓存目录和队列子目录。
 - CPU/GPU 虚拟环境位置。
 - 标准安装、自检和启动命令。
 

@@ -72,6 +72,7 @@ const stopAutoRefresh = () => {
 const jobs = computed(() => dashboard.value?.jobs || [])
 const summary = computed(() => dashboard.value?.summary || {})
 const contract = computed(() => dashboard.value?.contract || {})
+const storageContract = computed(() => contract.value.storage_contract || {})
 const stateCounts = computed(() => dashboard.value?.counts || {})
 const runningJobs = computed(() => dashboard.value?.running_jobs || [])
 const todoJobs = computed(() => dashboard.value?.todo_jobs || [])
@@ -240,6 +241,14 @@ onBeforeUnmount(() => {
       <div class="contract-item wide">
         <span>队列根目录</span>
         <strong>{{ contract.queue_root || dashboard?.queue_root || '-' }}</strong>
+      </div>
+      <div class="contract-item wide">
+        <span>最终输出</span>
+        <strong>{{ storageContract.final_output_root || '-' }}</strong>
+      </div>
+      <div class="contract-item wide">
+        <span>媒体缓存</span>
+        <strong>{{ storageContract.backend_storage?.media || contract.local_media_dir || '-' }}</strong>
       </div>
       <div class="contract-item">
         <span>CPU 环境</span>
@@ -555,9 +564,13 @@ onBeforeUnmount(() => {
 
 .contract-strip {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(240px, 1.4fr) minmax(240px, 1.4fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.contract-item.wide {
+  grid-column: span 2;
 }
 
 .contract-item,
@@ -1001,6 +1014,10 @@ onBeforeUnmount(() => {
 
   .summary-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contract-item.wide {
+    grid-column: auto;
   }
 }
 
