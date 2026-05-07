@@ -36,6 +36,7 @@ tools\run_quality_checks.ps1 -SkipFrontendBuild
 - 分布式 worker 统一入口是否存在并可打印 help。
 - `batch_video_notes.cmd`、`parallel_regenerate.cmd` 是否可打印 help。
 - 队列状态命令是否能读取标准 `_queue`。
+- `check_storage_layout.py --strict` 是否确认目录契约没有结构性错误。
 - 前端 `npm run build` 是否成功。
 
 ## 自动化覆盖现状
@@ -46,6 +47,7 @@ tools\run_quality_checks.ps1 -SkipFrontendBuild
 - 队列看板数据归一化、p 序排序、lease 过期判断、运行契约命令。
 - 分布式队列入队、认领、dry-run 释放、prepare/codex 完成状态、artifact 导入导出。
 - Doctor 对 Python 3.12、队列目录分离、GPU SMB ProjectRoot 禁止策略的报告。
+- 存储布局检查：标准 `_queue` 子目录、父级 legacy 目录、job artifact 路径元数据修复。
 - 生成产物校验：必需文件、质量文件、未收尾 `#image[]`、纯数字图片 alt、缺失截图。
 
 未自动化，需人工或专用机器执行：
@@ -114,6 +116,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
   backend\app.py `
   backend\routers\queue.py `
   tools\m2m_doctor.py `
+  tools\check_storage_layout.py `
   tools\distributed_video_notes.py `
   tools\batch_video_notes.py `
   tools\launch_parallel_regeneration.py `
@@ -139,6 +142,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
 - `test_queue_status.py` 覆盖队列看板归一化。
 - `test_distributed_queue.py` 覆盖入队、认领、完成和 artifact 流转。
 - `test_doctor_contract.py` 覆盖运行契约失败与成功路径。
+- `test_storage_layout.py` 覆盖目录契约和 job 路径修复。
 - `test_validate_outputs.py` 覆盖生成产物质量校验。
 - 命令 exit code 为 0。
 
@@ -167,7 +171,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
 - CPU 检查能识别 Codex CLI。
 - Frontend 检查能识别 node/npm。
 
-### TC-L1-005 前端构建
+### TC-L1-005 存储布局自检
+
+步骤：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe tools\check_storage_layout.py `
+  --project-root D:\StudyReference\m2m_queue\AI-Media2Doc `
+  --queue-root D:\StudyReference\m2m_queue\_queue `
+  --strict
+```
+
+期望：
+
+- 输出 `storage layout: OK`。
+- 父目录只包含 `AI-Media2Doc` 和 `_queue` 等被明确允许的目录，不存在新的父级 `logs` 或 `artifacts`。
+- `_queue\jobs`、`_queue\artifacts`、`_queue\logs`、`_queue\work\manifests` 存在。
+- 如果出现非运行任务的旧 artifact 路径，使用同一命令加 `--fix` 修复。
+
+### TC-L1-006 前端构建
 
 步骤：
 

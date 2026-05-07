@@ -64,6 +64,28 @@ class QueueStatusTests(unittest.TestCase):
         self.assertIn("start_worker.ps1 -Role cpu", contract["commands"]["start_cpu"])
         self.assertIn("start_worker.ps1 -Role gpu", contract["commands"]["start_gpu"])
 
+    def test_storage_health_reports_stale_artifact_paths(self) -> None:
+        queue_root = Path(r"D:\StudyReference\m2m_queue\_queue")
+        health = queue.storage_health(
+            queue_root,
+            [
+                {
+                    "job_id": "BVtest_p01",
+                    "state": "done",
+                    "slug": "第一讲",
+                    "paths": {
+                        "artifact_dir": r"D:\StudyReference\m2m_queue\artifacts\BVtest_p01",
+                        "artifact_output": r"D:\StudyReference\m2m_queue\artifacts\BVtest_p01\output\第一讲",
+                        "artifact_media": r"D:\StudyReference\m2m_queue\artifacts\BVtest_p01\media\video.mp4",
+                        "video_filename": "video.mp4",
+                    },
+                }
+            ],
+        )
+        self.assertTrue(health["ok"])
+        self.assertEqual(health["warning_count"], 1)
+        self.assertIn("artifact_dir", health["warnings"][0]["mismatches"])
+
 
 if __name__ == "__main__":
     unittest.main()

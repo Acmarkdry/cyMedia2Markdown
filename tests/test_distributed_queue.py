@@ -67,6 +67,47 @@ class DistributedQueueTests(unittest.TestCase):
             self.assertEqual(failed["state"], "codex_failed")
             self.assertEqual(failed["last_error"]["message"], "boom")
 
+    def test_finish_job_normalizes_legacy_artifact_path_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            queue_root = root / "_queue"
+            job_dir = queue_root / "jobs"
+            job_dir.mkdir(parents=True)
+            job_file = job_dir / "BVtest_p01.json"
+            job_file.write_text(
+                json.dumps(
+                    {
+                        "job_id": "BVtest_p01",
+                        "state": "codex_running",
+                        "owner": "cpu-worker",
+                        "video": {"slug": "第一讲"},
+                        "paths": {
+                            "artifact_dir": str(root / "artifacts" / "BVtest_p01"),
+                            "artifact_output": str(root / "artifacts" / "BVtest_p01" / "output" / "第一讲"),
+                            "artifact_media": str(root / "artifacts" / "BVtest_p01" / "media" / "video.mp4"),
+                            "video_filename": "video.mp4",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            dvn.finish_job(
+                queue_root,
+                "BVtest_p01",
+                "codex",
+                "cpu-worker",
+                True,
+                queue_root / "logs" / "c.log",
+                0,
+                paths={"artifact_output": str(queue_root / "artifacts" / "BVtest_p01" / "output" / "第一讲")},
+            )
+
+            finished = dvn.load_job(job_file)
+            self.assertEqual(Path(finished["paths"]["artifact_dir"]), queue_root / "artifacts" / "BVtest_p01")
+            self.assertEqual(Path(finished["paths"]["artifact_media"]), queue_root / "artifacts" / "BVtest_p01" / "media" / "video.mp4")
+
     def test_artifact_roundtrip_and_codex_output_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

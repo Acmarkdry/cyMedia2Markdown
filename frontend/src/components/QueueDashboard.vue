@@ -73,6 +73,7 @@ const jobs = computed(() => dashboard.value?.jobs || [])
 const summary = computed(() => dashboard.value?.summary || {})
 const contract = computed(() => dashboard.value?.contract || {})
 const storageContract = computed(() => contract.value.storage_contract || {})
+const storageHealth = computed(() => dashboard.value?.storage_health || {})
 const stateCounts = computed(() => dashboard.value?.counts || {})
 const runningJobs = computed(() => dashboard.value?.running_jobs || [])
 const todoJobs = computed(() => dashboard.value?.todo_jobs || [])
@@ -224,6 +225,24 @@ onBeforeUnmount(() => {
       v-if="errorMessage"
       :title="errorMessage"
       type="error"
+      show-icon
+      :closable="false"
+      class="status-alert"
+    />
+
+    <el-alert
+      v-else-if="storageHealth.error_count"
+      :title="`存储契约错误：${storageHealth.error_count} 项结构错误，需要先修目录。`"
+      type="error"
+      show-icon
+      :closable="false"
+      class="status-alert"
+    />
+
+    <el-alert
+      v-else-if="storageHealth.warning_count"
+      :title="`存储契约警告：${storageHealth.warning_count} 个任务存在旧路径元数据；非运行任务可用 check_storage_layout.py --fix 修复。`"
+      type="warning"
       show-icon
       :closable="false"
       class="status-alert"

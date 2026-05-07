@@ -28,6 +28,7 @@ Invoke-Check "Python compile" {
         (Join-Path $ProjectRoot "backend\app.py") `
         (Join-Path $ProjectRoot "backend\routers\queue.py") `
         (Join-Path $ProjectRoot "tools\m2m_doctor.py") `
+        (Join-Path $ProjectRoot "tools\check_storage_layout.py") `
         (Join-Path $ProjectRoot "tools\distributed_video_notes.py") `
         (Join-Path $ProjectRoot "tools\batch_video_notes.py") `
         (Join-Path $ProjectRoot "tools\launch_parallel_regeneration.py") `
@@ -68,6 +69,9 @@ Invoke-Check "Parallel helper help" {
 if (Test-Path $QueueRoot) {
     Invoke-Check "Queue status" {
         & cmd /c "`"$ProjectRoot\tools\distributed_status.cmd`" --queue-root `"$QueueRoot`""
+    }
+    Invoke-Check "Storage layout" {
+        & $Python (Join-Path $ProjectRoot "tools\check_storage_layout.py") --project-root $ProjectRoot --queue-root $QueueRoot --strict
     }
 } else {
     Write-Host "==> Queue status"

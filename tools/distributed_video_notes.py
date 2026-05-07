@@ -486,6 +486,8 @@ def finish_job(
         job["last_heartbeat_iso"] = iso_time(job["last_heartbeat"])
         if paths:
             job.setdefault("paths", {}).update(paths)
+        if job.get("paths"):
+            job["paths"] = normalize_artifact_paths(queue_root, job)
         if success:
             job["last_error"] = None
             job[f"{stage}_completed_at"] = now()
@@ -637,6 +639,29 @@ def media_dir(project_root: Path) -> Path:
 
 def artifact_dir(queue_root: Path, job_id: str) -> Path:
     return queue_root / "artifacts" / job_id
+
+
+def normalize_artifact_paths(queue_root: Path, job: dict[str, Any]) -> dict[str, Any]:
+    paths = dict(job.get("paths") or {})
+    if not paths:
+        return paths
+    job_id = str(job.get("job_id") or "")
+    video = job.get("video") if isinstance(job.get("video"), dict) else {}
+    slug = str(video.get("slug") or job.get("slug") or "")
+    if not job_id:
+        return paths
+    base = artifact_dir(queue_root, job_id)
+    paths["artifact_dir"] = str(base)
+    if slug:
+        paths["artifact_output"] = str(base / "output" / slug)
+    video_filename = paths.get("video_filename")
+    if not video_filename and paths.get("artifact_media"):
+        video_filename = Path(str(paths["artifact_media"])).name
+    if video_filename:
+        media_name = Path(str(video_filename)).name
+        paths["video_filename"] = media_name
+        paths["artifact_media"] = str(base / "media" / media_name)
+    return paths
 
 
 def load_status_for_slug(project_root: Path, slug: str) -> dict[str, Any]:

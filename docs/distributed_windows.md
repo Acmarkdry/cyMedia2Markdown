@@ -227,6 +227,22 @@ tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue
 tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue --json
 ```
 
+检查目录契约和 job 路径元数据：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe tools\check_storage_layout.py `
+  --queue-root D:\StudyReference\m2m_queue\_queue `
+  --strict
+```
+
+如果旧流程留下了非运行任务的 artifact 路径元数据，可修复：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe tools\check_storage_layout.py `
+  --queue-root D:\StudyReference\m2m_queue\_queue `
+  --fix
+```
+
 重试 prepare 阶段：
 
 ```powershell

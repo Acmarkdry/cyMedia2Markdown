@@ -111,6 +111,13 @@ npm run dev
 tools\run_quality_checks.ps1
 ```
 
+单独检查或修复目录/队列路径元数据：
+
+```powershell
+.\.venv-cpu\Scripts\python.exe tools\check_storage_layout.py --queue-root D:\StudyReference\m2m_queue\_queue
+.\.venv-cpu\Scripts\python.exe tools\check_storage_layout.py --queue-root D:\StudyReference\m2m_queue\_queue --fix
+```
+
 ## 常用工作流
 
 ### URL 到完整笔记

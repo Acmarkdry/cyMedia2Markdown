@@ -219,6 +219,63 @@ def state_summary(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def expected_artifact_paths(queue_root: Path, job: dict[str, Any]) -> dict[str, str]:
+    paths = job.get("paths") if isinstance(job.get("paths"), dict) else {}
+    job_id = str(job.get("job_id") or "")
+    slug = str(job.get("slug") or "")
+    base = queue_root / "artifacts" / job_id
+    expected = {"artifact_dir": str(base)}
+    if slug:
+        expected["artifact_output"] = str(base / "output" / slug)
+    video_filename = paths.get("video_filename")
+    if not video_filename and paths.get("artifact_media"):
+        video_filename = Path(str(paths["artifact_media"])).name
+    if video_filename:
+        media_name = Path(str(video_filename)).name
+        expected["artifact_media"] = str(base / "media" / media_name)
+    return expected
+
+
+def path_mismatches(queue_root: Path, job: dict[str, Any]) -> dict[str, dict[str, str]]:
+    paths = job.get("paths") if isinstance(job.get("paths"), dict) else {}
+    if not paths:
+        return {}
+    mismatches: dict[str, dict[str, str]] = {}
+    for key, expected_value in expected_artifact_paths(queue_root, job).items():
+        actual_value = str(paths.get(key) or "")
+        if actual_value and Path(actual_value).resolve(strict=False) != Path(expected_value).resolve(strict=False):
+            mismatches[key] = {"actual": actual_value, "expected": expected_value}
+    return mismatches
+
+
+def storage_health(queue_root: Path, jobs: list[dict[str, Any]]) -> dict[str, Any]:
+    errors = []
+    warnings = []
+    for legacy_name in ["logs", "artifacts"]:
+        legacy_path = queue_root.parent / legacy_name
+        if legacy_path.exists():
+            errors.append({"code": "legacy-share-child", "path": str(legacy_path)})
+    for job in jobs:
+        mismatches = path_mismatches(queue_root, job)
+        if mismatches:
+            warnings.append(
+                {
+                    "code": "stale-job-artifact-paths",
+                    "job_id": job.get("job_id"),
+                    "state": job.get("state"),
+                    "running": job.get("state") in RUNNING_STATES,
+                    "mismatches": mismatches,
+                }
+            )
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "warning_count": len(warnings),
+        "error_count": len(errors),
+    }
+
+
 def runtime_contract(queue_root: Path) -> dict[str, Any]:
     share_root = queue_root.parent
     project_name = PROJECT_ROOT.name
@@ -308,6 +365,7 @@ async def queue_status(include_events: bool = Query(True)) -> APIResponse:
             "queued": counts.get("queued", 0),
             "progress_percent": round((done / total) * 100) if total else 0,
         },
+        "storage_health": storage_health(queue_root, jobs),
         "states": state_summary(jobs),
         "current_jobs": current_jobs,
         "running_jobs": running_jobs,
