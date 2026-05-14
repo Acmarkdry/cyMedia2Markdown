@@ -25,12 +25,12 @@ STATE_ORDER = {
     "prepare_running": 1,
     "prepare_failed": 1,
     "prepared": 2,
-    "codex_running": 3,
-    "codex_failed": 3,
+    "opencode_running": 3,
+    "opencode_failed": 3,
     "done": 4,
 }
-RUNNING_STATES = {"prepare_running", "codex_running"}
-FAILED_STATES = {"prepare_failed", "codex_failed"}
+RUNNING_STATES = {"prepare_running", "opencode_running"}
+FAILED_STATES = {"prepare_failed", "opencode_failed"}
 
 
 def iso_time(value: float | None = None) -> str:
@@ -98,19 +98,19 @@ def parse_events(queue_root: Path, job_id: str, limit: int = 8) -> list[dict[str
 def stage_status(job: dict[str, Any], stage: str) -> str:
     state = str(job.get("state") or "")
     if stage == "prepare":
-        if state in {"prepared", "codex_running", "codex_failed", "done"}:
+        if state in {"prepared", "opencode_running", "opencode_failed", "done"}:
             return "success"
         if state == "prepare_running":
             return "running"
         if state == "prepare_failed":
             return "failed"
         return "waiting"
-    if stage == "codex":
+    if stage == "opencode":
         if state == "done":
             return "success"
-        if state == "codex_running":
+        if state == "opencode_running":
             return "running"
-        if state == "codex_failed":
+        if state == "opencode_failed":
             return "failed"
         if state in {"prepared", "prepare_running", "prepare_failed"}:
             return "waiting"
@@ -124,8 +124,8 @@ def build_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
         (item for item in reversed(history) if item.get("stage") == "prepare" and item.get("event") == "claimed"),
         None,
     )
-    codex_claim = next(
-        (item for item in reversed(history) if item.get("stage") == "codex" and item.get("event") == "claimed"),
+    opencode_claim = next(
+        (item for item in reversed(history) if item.get("stage") == "opencode" and item.get("event") == "claimed"),
         None,
     )
     return [
@@ -143,17 +143,17 @@ def build_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
             "owner": (prepare_claim or {}).get("owner"),
         },
         {
-            "key": "codex",
+            "key": "opencode",
             "label": "生成笔记",
-            "status": stage_status(job, "codex"),
-            "time": job.get("codex_completed_at_iso") or (codex_claim or {}).get("time"),
-            "owner": (codex_claim or {}).get("owner"),
+            "status": stage_status(job, "opencode"),
+            "time": job.get("opencode_completed_at_iso") or (opencode_claim or {}).get("time"),
+            "owner": (opencode_claim or {}).get("owner"),
         },
         {
             "key": "done",
             "label": "完成",
             "status": "success" if job.get("state") == "done" else "waiting",
-            "time": job.get("codex_completed_at_iso") if job.get("state") == "done" else None,
+            "time": job.get("opencode_completed_at_iso") if job.get("state") == "done" else None,
         },
     ]
 
@@ -189,9 +189,9 @@ def normalize_job(queue_root: Path, job: dict[str, Any]) -> dict[str, Any]:
         "created_at": job.get("created_at"),
         "created_at_iso": job.get("created_at_iso"),
         "prepare_completed_at_iso": job.get("prepare_completed_at_iso"),
-        "codex_completed_at_iso": job.get("codex_completed_at_iso"),
+        "opencode_completed_at_iso": job.get("opencode_completed_at_iso"),
         "prepare_attempts": int(attempts.get("prepare") or 0),
-        "codex_attempts": int(attempts.get("codex") or 0),
+        "opencode_attempts": int(attempts.get("opencode") or 0),
         "last_error": last_error,
         "paths": paths,
         "steps": build_steps(job),
@@ -204,10 +204,10 @@ def state_summary(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ("queued", "待准备"),
         ("prepare_running", "准备中"),
         ("prepared", "待生成"),
-        ("codex_running", "生成中"),
+        ("opencode_running", "生成中"),
         ("done", "已完成"),
         ("prepare_failed", "准备失败"),
-        ("codex_failed", "生成失败"),
+        ("opencode_failed", "生成失败"),
     ]
     return [
         {
