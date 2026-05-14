@@ -123,10 +123,10 @@ def build_report(args: argparse.Namespace) -> dict:
     if role in {"cpu", "gpu", "all"} and not python:
         errors.append("No runnable Python 3.12.x environment found.")
 
-    codex = os.environ.get("CODEX_CLI_PATH") or shutil.which("codex.cmd") or shutil.which("codex.exe") or shutil.which("codex")
-    codex_ok, codex_version = (run_ok([codex, "--version"]) if codex else (False, "missing"))
-    if role in {"cpu", "all"} and not codex_ok:
-        errors.append("Codex CLI is missing or not executable. Set CODEX_CLI_PATH or fix PATH.")
+    opencode = os.environ.get("OPENCODE_CLI_PATH") or shutil.which("opencode.cmd") or shutil.which("opencode.exe") or shutil.which("opencode")
+    opencode_ok, opencode_version = (run_ok([opencode, "--version"]) if opencode else (False, "missing"))
+    if role in {"cpu", "all"} and not opencode_ok:
+        errors.append("OpenCode CLI is missing or not executable. Set OPENCODE_CLI_PATH or fix PATH.")
 
     node_ok, node_version = run_ok(["node", "--version"])
     npm_ok, npm_version = run_ok(["npm", "--version"])
@@ -151,7 +151,7 @@ def build_report(args: argparse.Namespace) -> dict:
         "errors": errors,
         "warnings": warnings,
         "python": {"selected": str(python) if python else "", "candidates": python_rows},
-        "codex": {"path": codex or "", "ok": codex_ok, "version": codex_version},
+        "opencode": {"path": opencode or "", "ok": opencode_ok, "version": opencode_version},
         "node": {"ok": node_ok, "version": node_version},
         "npm": {"ok": npm_ok, "version": npm_version},
         "backend": {"checked": backend_ok is not None, "ok": backend_ok, "message": backend_message},
@@ -170,7 +170,7 @@ def print_human(report: dict) -> None:
     for error in report["errors"]:
         print(f"ERROR: {error}")
     print(f"python: {report['python']['selected'] or 'not found'}")
-    print(f"codex: {report['codex']['path'] or 'not found'} ({report['codex']['version']})")
+    print(f"opencode: {report['opencode']['path'] or 'not found'} ({report['opencode']['version']})")
     print(f"node: {report['node']['version']}")
     print(f"npm: {report['npm']['version']}")
     if report["backend"]["checked"]:

@@ -3,8 +3,8 @@
 
 The distributed mode keeps the existing processing pipeline intact:
 
-* prepare workers run ``batch_video_notes.py --skip-codex`` on GPU machines.
-* codex workers run ``regenerate_video_notes_direct.py`` on CPU/Codex machines.
+* prepare workers run ``batch_video_notes.py --skip-opencode`` on GPU machines.
+* opencode workers run ``regenerate_video_notes_direct.py`` on CPU/OpenCode machines.
 
 Coordination happens through a shared directory that can live on an SMB share.
 Each job is one JSON file. Workers claim jobs with short directory locks and
@@ -34,7 +34,7 @@ from video_manifest import ascii_slug, load_manifest, safe_output_name
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_API_BASE = "http://127.0.0.1:8080/api/v1"
 SCHEMA_VERSION = 1
-RUNNING_STATES = {"prepare_running", "codex_running"}
+RUNNING_STATES = {"prepare_running", "opencode_running"}
 REQUIRED_PYTHON_PREFIX = "Python 3.12."
 
 
@@ -78,7 +78,7 @@ def python_version_ok(python_exe: Path) -> tuple[bool, str]:
 def default_python(project_root: Path, role: str = "worker") -> Path:
     role_envs = {
         "prepare": [".venv-gpu"],
-        "codex": [".venv-cpu"],
+        "opencode": [".venv-cpu"],
         "worker": [".venv-cpu", ".venv-gpu"],
     }
     names = role_envs.get(role, role_envs["worker"])
@@ -108,11 +108,11 @@ def is_relative_to(child: Path, parent: Path) -> bool:
         return False
 
 
-def codex_command() -> str | None:
-    explicit = os.environ.get("CODEX_CLI_PATH")
+def opencode_command() -> str | None:
+    explicit = os.environ.get("OPENCODE_CLI_PATH")
     if explicit:
         return explicit
-    return shutil.which("codex.cmd") or shutil.which("codex.exe") or shutil.which("codex")
+    return shutil.which("opencode.cmd") or shutil.which("opencode.exe") or shutil.which("opencode")
 
 
 def health_url_from_api_base(api_base: str) -> str:
@@ -171,12 +171,12 @@ def preflight_worker(args: argparse.Namespace, role: str) -> Path:
         ok, message = check_backend_health(args.api_base)
         if not ok:
             problems.append(f"backend health check failed: {message}")
-    if role == "codex":
-        command = codex_command()
+    if role == "opencode":
+        command = opencode_command()
         if not command:
-            problems.append("Codex CLI is not on PATH and CODEX_CLI_PATH is not set.")
+            problems.append("OpenCode CLI is not on PATH and OPENCODE_CLI_PATH is not set.")
         elif not executable_works(command, ["--version"]):
-            problems.append(f"Codex CLI cannot run: {command}")
+            problems.append(f"OpenCode CLI cannot run: {command}")
 
     payload = {
         "event": "preflight",
@@ -363,7 +363,7 @@ def enqueue(args: argparse.Namespace) -> int:
             "source_id": video.get("source_id"),
             "slug": video.get("slug"),
             "title": video.get("title"),
-            "attempts": {"prepare": 0, "codex": 0},
+            "attempts": {"prepare": 0, "opencode": 0},
             "created_at": now(),
             "created_at_iso": iso_time(),
             "updated_at": now(),
@@ -385,8 +385,8 @@ def enqueue(args: argparse.Namespace) -> int:
 def running_stage_for_state(state: str) -> str | None:
     if state == "prepare_running":
         return "prepare"
-    if state == "codex_running":
-        return "codex"
+    if state == "opencode_running":
+        return "opencode"
     return None
 
 
@@ -399,9 +399,9 @@ def claim_job(queue_root: Path, stage: str, owner: str, args: argparse.Namespace
     if stage == "prepare":
         eligible = {"queued", "prepare_failed"}
         running = "prepare_running"
-    elif stage == "codex":
-        eligible = {"prepared", "codex_failed"}
-        running = "codex_running"
+    elif stage == "opencode":
+        eligible = {"prepared", "opencode_failed"}
+        running = "opencode_running"
     else:
         raise ValueError(stage)
 
@@ -473,7 +473,7 @@ def finish_job(
 ) -> None:
     running_state = f"{stage}_running"
     success_state = "prepared" if stage == "prepare" else "done"
-    failed_state = "prepare_failed" if stage == "prepare" else "codex_failed"
+    failed_state = "prepare_failed" if stage == "prepare" else "opencode_failed"
 
     def update(job: dict[str, Any]) -> dict[str, Any] | None:
         if job.get("state") != running_state or job.get("owner") != owner:
@@ -709,7 +709,7 @@ def import_prepared_artifact(project_root: Path, queue_root: Path, job: dict[str
             copy_file_if_needed(media_file, media_dir(project_root) / media_file.name)
 
 
-def export_codex_artifact(project_root: Path, queue_root: Path, job: dict[str, Any]) -> dict[str, Any]:
+def export_opencode_artifact(project_root: Path, queue_root: Path, job: dict[str, Any]) -> dict[str, Any]:
     slug = str(job["video"]["slug"])
     job_artifact = artifact_dir(queue_root, str(job["job_id"]))
     local_output = output_dir(project_root, slug)
@@ -722,7 +722,7 @@ def export_codex_artifact(project_root: Path, queue_root: Path, job: dict[str, A
     }
 
 
-def codex_output_ok(project_root: Path, slug: str) -> tuple[bool, str | None]:
+def opencode_output_ok(project_root: Path, slug: str) -> tuple[bool, str | None]:
     out_dir = output_dir(project_root, slug)
     required = ["transcript.json", "notes.md", "notes.html", "backend_video_notes_quality.json"]
     for name in required:
@@ -756,7 +756,7 @@ def run_prepare_job(queue_root: Path, job: dict[str, Any], owner: str, args: arg
         str(args.media_timeout),
         "--api-base",
         args.api_base.rstrip("/"),
-        "--skip-codex",
+        "--skip-opencode",
     ]
     if args.force_asr:
         command.append("--force-asr")
@@ -785,12 +785,12 @@ def run_prepare_job(queue_root: Path, job: dict[str, Any], owner: str, args: arg
         finish_job(queue_root, str(job["job_id"]), "prepare", owner, False, log_path, exit_code, f"prepare exited {exit_code}")
 
 
-def run_codex_job(queue_root: Path, job: dict[str, Any], owner: str, args: argparse.Namespace) -> None:
+def run_opencode_job(queue_root: Path, job: dict[str, Any], owner: str, args: argparse.Namespace) -> None:
     project_root = resolve_project_root(args.project_root)
-    python_exe = Path(args.python or default_python(project_root, "codex"))
+    python_exe = Path(args.python or default_python(project_root, "opencode"))
     slug = str(job["video"]["slug"])
     selector = str(job["video"].get("source_id") or slug)
-    log_path = command_log_path(queue_root, str(job["job_id"]), "codex")
+    log_path = command_log_path(queue_root, str(job["job_id"]), "opencode")
     command = [
         str(python_exe),
         str(project_root / "tools" / "regenerate_video_notes_direct.py"),
@@ -818,13 +818,13 @@ def run_codex_job(queue_root: Path, job: dict[str, Any], owner: str, args: argpa
     if args.cache_after_epoch is not None:
         command.extend(["--cache-after-epoch", str(args.cache_after_epoch)])
     if args.dry_run:
-        print(json.dumps({"dry_run": True, "stage": "codex", "job_id": job["job_id"], "command": command}, ensure_ascii=False))
-        release_dry_run_claim(queue_root, str(job["job_id"]), "codex", owner)
+        print(json.dumps({"dry_run": True, "stage": "opencode", "job_id": job["job_id"], "command": command}, ensure_ascii=False))
+        release_dry_run_claim(queue_root, str(job["job_id"]), "opencode", owner)
         return
     try:
         import_prepared_artifact(project_root, queue_root, job)
     except Exception as exc:
-        finish_job(queue_root, str(job["job_id"]), "codex", owner, False, log_path, 1, str(exc))
+        finish_job(queue_root, str(job["job_id"]), "opencode", owner, False, log_path, 1, str(exc))
         return
     exit_code = run_with_heartbeat(
         command,
@@ -832,7 +832,7 @@ def run_codex_job(queue_root: Path, job: dict[str, Any], owner: str, args: argpa
         log_path,
         queue_root,
         str(job["job_id"]),
-        "codex",
+        "opencode",
         owner,
         args.lease_seconds,
         args.heartbeat_interval,
@@ -840,13 +840,13 @@ def run_codex_job(queue_root: Path, job: dict[str, Any], owner: str, args: argpa
     paths: dict[str, Any] = {}
     export_error: str | None = None
     try:
-        paths = export_codex_artifact(project_root, queue_root, job)
+        paths = export_opencode_artifact(project_root, queue_root, job)
     except Exception as exc:
         export_error = str(exc)
-    ok, reason = codex_output_ok(project_root, slug)
+    ok, reason = opencode_output_ok(project_root, slug)
     success = exit_code == 0 and ok and export_error is None
-    error = export_error or reason or (None if success else f"codex exited {exit_code}")
-    finish_job(queue_root, str(job["job_id"]), "codex", owner, success, log_path, exit_code, error, paths=paths)
+    error = export_error or reason or (None if success else f"opencode exited {exit_code}")
+    finish_job(queue_root, str(job["job_id"]), "opencode", owner, success, log_path, exit_code, error, paths=paths)
 
 
 def prepare_worker(args: argparse.Namespace) -> int:
@@ -871,11 +871,11 @@ def prepare_worker(args: argparse.Namespace) -> int:
             return 0
 
 
-def codex_worker(args: argparse.Namespace) -> int:
+def opencode_worker(args: argparse.Namespace) -> int:
     queue_root = Path(args.queue_root).resolve()
     ensure_layout(queue_root)
-    preflight_worker(args, "codex")
-    owner = worker_id("codex")
+    preflight_worker(args, "opencode")
+    owner = worker_id("opencode")
     if args.dry_run and args.once and not args.max_jobs:
         args.max_jobs = max(1, args.jobs)
     processed = 0
@@ -883,11 +883,11 @@ def codex_worker(args: argparse.Namespace) -> int:
         running: dict[concurrent.futures.Future[None], str] = {}
         while True:
             while len(running) < args.jobs and (not args.max_jobs or processed + len(running) < args.max_jobs):
-                job = claim_job(queue_root, "codex", owner, args)
+                job = claim_job(queue_root, "opencode", owner, args)
                 if not job:
                     break
-                print(json.dumps({"stage": "codex", "event": "claimed", "job_id": job["job_id"], "title": job.get("title")}, ensure_ascii=False))
-                future = executor.submit(run_codex_job, queue_root, job, owner, args)
+                print(json.dumps({"stage": "opencode", "event": "claimed", "job_id": job["job_id"], "title": job.get("title")}, ensure_ascii=False))
+                future = executor.submit(run_opencode_job, queue_root, job, owner, args)
                 running[future] = str(job["job_id"])
             if running:
                 done, _ = concurrent.futures.wait(running, timeout=1, return_when=concurrent.futures.FIRST_COMPLETED)
@@ -896,7 +896,7 @@ def codex_worker(args: argparse.Namespace) -> int:
                     try:
                         future.result()
                     except Exception as exc:
-                        print(json.dumps({"stage": "codex", "event": "worker-error", "job_id": job_id, "error": str(exc)}, ensure_ascii=False))
+                        print(json.dumps({"stage": "opencode", "event": "worker-error", "job_id": job_id, "error": str(exc)}, ensure_ascii=False))
                     processed += 1
                 if args.max_jobs and processed >= args.max_jobs and not running:
                     return 0
@@ -910,7 +910,7 @@ def worker(args: argparse.Namespace) -> int:
     if args.role == "gpu":
         return prepare_worker(args)
     if args.role == "cpu":
-        return codex_worker(args)
+        return opencode_worker(args)
     raise SystemExit(f"Unsupported worker role: {args.role}")
 
 
@@ -931,7 +931,7 @@ def status(args: argparse.Namespace) -> int:
                 "source_id": job.get("source_id"),
                 "slug": job.get("slug"),
                 "prepare_attempts": attempts.get("prepare", 0),
-                "codex_attempts": attempts.get("codex", 0),
+                "opencode_attempts": attempts.get("opencode", 0),
                 "owner": job.get("owner") or "",
                 "lease_until": job.get("lease_until_iso") or "",
                 "updated_at": job.get("updated_at_iso") or "",
@@ -943,7 +943,7 @@ def status(args: argparse.Namespace) -> int:
         return 0
     print(f"queue_root: {queue_root}")
     print("counts:", json.dumps(counts, ensure_ascii=False, sort_keys=True))
-    headers = ["state", "job_id", "prepare", "codex", "updated_at", "error"]
+    headers = ["state", "job_id", "prepare", "opencode", "updated_at", "error"]
     print("\t".join(headers))
     for row in rows:
         print(
@@ -952,7 +952,7 @@ def status(args: argparse.Namespace) -> int:
                     str(row["state"]),
                     str(row["job_id"]),
                     str(row["prepare_attempts"]),
-                    str(row["codex_attempts"]),
+                    str(row["opencode_attempts"]),
                     str(row["updated_at"]),
                     str(row["error"])[:120],
                 ]
@@ -974,11 +974,11 @@ def requeue(args: argparse.Namespace) -> int:
         def update(job: dict[str, Any]) -> dict[str, Any] | None:
             state = str(job.get("state") or "")
             if args.stage == "prepare":
-                if state not in {"queued", "prepare_failed", "prepare_running", "codex_failed", "prepared"} and not args.force:
+                if state not in {"queued", "prepare_failed", "prepare_running", "opencode_failed", "prepared"} and not args.force:
                     return None
                 job["state"] = "queued"
-            elif args.stage == "codex":
-                if state not in {"prepared", "codex_failed", "codex_running", "done"} and not args.force:
+            elif args.stage == "opencode":
+                if state not in {"prepared", "opencode_failed", "opencode_running", "done"} and not args.force:
                     return None
                 job["state"] = "prepared"
             else:
@@ -1039,7 +1039,7 @@ def build_parser() -> argparse.ArgumentParser:
     worker_parser.add_argument("--force-chunks", action="store_true")
     worker_parser.add_argument("--cache-after-epoch", type=float)
     worker_parser.add_argument("--merge-group-size", type=int, default=3)
-    worker_parser.add_argument("--merge-strategy", choices=["codex", "assemble"], default="assemble")
+    worker_parser.add_argument("--merge-strategy", choices=["opencode", "assemble"], default="assemble")
     worker_parser.set_defaults(func=worker, quality_retry=True, clear_screenshots=True)
 
     status_parser = subparsers.add_parser("status", help="Print queue status.")
@@ -1050,7 +1050,7 @@ def build_parser() -> argparse.ArgumentParser:
     requeue_parser = subparsers.add_parser("requeue", help="Move failed or stale jobs back to a runnable state.")
     requeue_parser.add_argument("--queue-root", required=True, type=Path)
     requeue_parser.add_argument("--job", action="append", help="Job id to requeue. Can be repeated. Defaults to all eligible jobs.")
-    requeue_parser.add_argument("--stage", choices=["prepare", "codex", "all"], default="all")
+    requeue_parser.add_argument("--stage", choices=["prepare", "opencode", "all"], default="all")
     requeue_parser.add_argument("--force", action="store_true")
     requeue_parser.set_defaults(func=requeue)
 
