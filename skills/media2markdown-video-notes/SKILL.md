@@ -1,6 +1,6 @@
 ---
 name: media2markdown-video-notes
-description: Use this skill when Codex needs to operate the local Media2Markdown / AI-Media2Doc workflow for converting local videos, audio files, Bilibili URLs, or Bilibili multi-part playlists into high-density Markdown/HTML study notes with transcript files and screenshots. Trigger on requests to batch-process videos, crawl/extract Bilibili course playlists, generate or regenerate video learning notes, use Codex CLI instead of OpenAI API, run local faster-whisper ASR, retry failed video note jobs, validate screenshot references, or maintain the video-to-notes backend workflow in D:\StudyReference\m2m_queue\AI-Media2Doc.
+description: Use this skill when OpenCode needs to operate the local Media2Markdown / AI-Media2Doc workflow for converting local videos, audio files, Bilibili URLs, or Bilibili multi-part playlists into high-density Markdown/HTML study notes with transcript files and screenshots. Trigger on requests to batch-process videos, crawl/extract Bilibili course playlists, generate or regenerate video learning notes, use OpenCode CLI instead of OpenAI API, run local faster-whisper ASR, retry failed video note jobs, validate screenshot references, or maintain the video-to-notes backend workflow in D:\StudyReference\m2m_queue\AI-Media2Doc.
 ---
 
 # Media2Markdown Video Notes
@@ -17,17 +17,17 @@ Prefer the role-specific project environments:
 
 `.\.venv-gpu\Scripts\python.exe`
 
-Treat this project-local skill as the canonical editable copy for repository maintenance. If a future Codex session needs automatic discovery outside this repo, sync this folder to `$CODEX_HOME\skills\media2markdown-video-notes`.
+Treat this project-local skill as the canonical editable copy for repository maintenance. If a future OpenCode session needs automatic discovery outside this repo, sync this folder to `$OPENCODE_HOME\skills\media2markdown-video-notes`.
 
 The durable workflow is:
 
 1. Build a manifest for videos.
-2. Prepare media and transcripts with `tools\batch_video_notes.cmd --skip-codex`.
+2. Prepare media and transcripts with `tools\batch_video_notes.cmd --skip-opencode`.
 3. Generate notes in parallel with `tools\parallel_regenerate.cmd`.
 4. Validate `notes.md`, `notes.html`, screenshots, and quality files.
 5. Commit/push only source and docs changes, not `output/`.
 
-Do not convert Codex/ChatGPT login state into API keys. Use Codex CLI only through the local command flow already implemented by the repo.
+Do not convert OpenCode/ChatGPT login state into API keys. Use OpenCode CLI only through the local command flow already implemented by the repo.
 
 ## Manifest Rules
 
@@ -50,14 +50,14 @@ Keep folder names human-readable. Do not use only BV ids when the video title is
 
 ## Preparation Stage
 
-Use preparation mode to download media, run local ASR, and write prompts without invoking Codex:
+Use preparation mode to download media, run local ASR, and write prompts without invoking OpenCode:
 
 ```powershell
 tools\batch_video_notes.cmd `
   --manifest output\my_manifest.json `
   --poll-interval 20 `
   --media-timeout 1800 `
-  --skip-codex
+  --skip-opencode
 ```
 
 For retrying one item:
@@ -68,12 +68,12 @@ tools\batch_video_notes.cmd `
   --only BVxxxx_p12 `
   --poll-interval 20 `
   --media-timeout 1800 `
-  --skip-codex
+  --skip-opencode
 ```
 
-ASR has a GPU lock. Let it run serially unless the user explicitly wants to risk multiple ASR workers. It is fine to run Codex note generation in parallel while ASR continues preparing later videos, as long as write targets do not overlap.
+ASR has a GPU lock. Let it run serially unless the user explicitly wants to risk multiple ASR workers. It is fine to run OpenCode note generation in parallel while ASR continues preparing later videos, as long as write targets do not overlap.
 
-## Codex Generation Stage
+## OpenCode Generation Stage
 
 For a prepared batch, prefer `assemble` merging to avoid repeated chunk boilerplate:
 
@@ -102,7 +102,7 @@ tools\parallel_regenerate.cmd `
 Use waves for large courses:
 
 - Keep ASR preparation in one serial process.
-- Run 2-4 Codex jobs at a time depending on stability.
+- Run 2-4 OpenCode jobs at a time depending on stability.
 - If a process exits with `1073807364`, treat it as interrupted; retry the affected slug. Existing chunk files are reused automatically unless `--force-chunks` is passed.
 
 ## Monitoring
@@ -189,11 +189,11 @@ print("TOTAL", len(rows), "problems", problems)
 
 ## Troubleshooting
 
-- `HTTP Error 400` during media download: retry the affected slug with `batch_video_notes.py --only ... --skip-codex`.
+- `HTTP Error 400` during media download: retry the affected slug with `batch_video_notes.py --only ... --skip-opencode`.
 - Interrupted generation or exit code `1073807364`: retry the affected slug with `launch_parallel_regeneration.py`; cached chunks should resume.
 - Missing screenshot files: rerun the affected slug without `--no-clear-screenshots` only if stale screenshots are suspected. Otherwise keep `--no-clear-screenshots` to avoid destroying useful outputs.
-- Codex CLI/network failures: keep prompts and chunk outputs; retry only failed slugs, not the whole batch.
-- Long videos: expect chunked generation. Do not replace `assemble` with final Codex merge unless the user explicitly wants a more synthesized but slower merge.
+- OpenCode CLI/network failures: keep prompts and chunk outputs; retry only failed slugs, not the whole batch.
+- Long videos: expect chunked generation. Do not replace `assemble` with final OpenCode merge unless the user explicitly wants a more synthesized but slower merge.
 
 ## Reporting
 
@@ -205,4 +205,4 @@ Report completion with:
 - Any retries or failures handled.
 - Git commit/push status if source files were changed.
 
-Do not final-answer while relevant `python` or `codex.exe exec` jobs for the requested batch are still running.
+Do not final-answer while relevant `python` or `opencode.exe exec` jobs for the requested batch are still running.
