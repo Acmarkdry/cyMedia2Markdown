@@ -8,7 +8,7 @@
 - 项目代码目录和队列目录必须分离。队列目录只放任务状态、日志和产物，不放项目源码。
 - CPU/GPU 使用同一个启动入口：`tools\start_worker.ps1 -Role cpu|gpu`。
 - GPU 机的 `-ProjectRoot` 必须是 GPU 本机磁盘上的项目克隆，不能是 SMB/UNC 路径。
-- CPU 机负责 Codex CLI 生成、截图、HTML 渲染和质量检查；GPU 机负责媒体下载/复用、抽音频和本地 ASR。
+- CPU 机负责 OpenCode CLI 生成、截图、HTML 渲染和质量检查；GPU 机负责媒体下载/复用、抽音频和本地 ASR。
 - 所有机器先跑 `tools\m2m_doctor.py` 自检，失败就修环境，不直接开 worker 碰运气。
 
 ## 标准目录
@@ -26,7 +26,7 @@ D:\StudyReference\m2m_queue\
       logs\                        后端服务日志
   _queue\                          分布式共享队列
     jobs\                          每个视频一个任务 JSON
-    artifacts\                     prepare/codex 阶段跨机器交换产物
+    artifacts\                     prepare/opencode 阶段跨机器交换产物
       <job_id>\output\<video_slug>\ output\<video_slug> 的队列副本
       <job_id>\media\<video_file>   prepare 阶段导出的媒体副本
     logs\                          worker 命令日志和事件日志
@@ -42,7 +42,7 @@ D:\StudyReference\m2m_queue\
 | `AI-Media2Doc\output\` | 当前机器可直接 review 的最终学习资料 | 不作为 worker 协作入口 |
 | `AI-Media2Doc\backend\local_storage\media\` | 当前机器后端可访问的媒体缓存 | 不跨机器直接引用 |
 | `_queue\jobs\` | 任务状态、租约、重试次数和路径元数据 | 共享 |
-| `_queue\artifacts\` | GPU prepare 和 CPU codex 之间交换输出与媒体副本 | 共享 |
+| `_queue\artifacts\` | GPU prepare 和 CPU opencode 之间交换输出与媒体副本 | 共享 |
 | `_queue\logs\` | worker stdout/stderr、命令日志、任务事件 JSONL | 共享 |
 | `_queue\work\manifests\` | worker 临时生成的单视频 manifest | 共享 |
 
@@ -97,7 +97,7 @@ tools\setup_runtime.ps1 -Role all
 生成的环境固定为：
 
 ```text
-.venv-cpu\       CPU/Codex worker 依赖
+.venv-cpu\       CPU/OpenCode worker 依赖
 .venv-gpu\       GPU/ASR worker 依赖
 frontend\node_modules\
 ```
@@ -129,7 +129,7 @@ doctor 会检查：
 - `ProjectRoot` 是否存在 `backend/ frontend/ tools/`。
 - `ProjectRoot` 是否错误地放进了 `QueueRoot`。
 - GPU 机是否错误地用 SMB 路径作为 `ProjectRoot`。
-- CPU 机是否能执行 Codex CLI。
+- CPU 机是否能执行 OpenCode CLI。
 - GPU 机后端健康检查是否可达。
 
 ## 启动后端
@@ -207,7 +207,7 @@ tools\start_worker.ps1 `
 -LeaseSeconds 1800    单任务租约时间
 -HeartbeatInterval 60 心跳刷新间隔
 -ForceAsr             GPU 角色强制重新转写
--Jobs 3               CPU 角色并发 Codex 任务数
+-Jobs 3               CPU 角色并发 OpenCode 任务数
 -NoQualityRetry       CPU 角色关闭质量重试
 ```
 
@@ -252,12 +252,12 @@ tools\distributed_video_notes.cmd requeue `
   --job BVxxxxxxxxxx
 ```
 
-重试 Codex 阶段：
+重试 OpenCode 阶段：
 
 ```powershell
 tools\distributed_video_notes.cmd requeue `
   --queue-root D:\StudyReference\m2m_queue\_queue `
-  --stage codex `
+  --stage opencode `
   --job BVxxxxxxxxxx
 ```
 
@@ -295,7 +295,7 @@ tools\distributed_status.cmd --queue-root D:\StudyReference\m2m_queue\_queue
 
 任务停在 `prepare_running`：GPU 机可能睡眠或后端退出。等待 lease 过期后重新启动 `-Role gpu` worker。
 
-任务停在 `codex_running`：CPU 机 Codex CLI 可能中断。等待 lease 过期后重新启动 `-Role cpu` worker，必要时 requeue codex 阶段。
+任务停在 `opencode_running`：CPU 机 OpenCode CLI 可能中断。等待 lease 过期后重新启动 `-Role cpu` worker，必要时 requeue opencode 阶段。
 
 报错 `ProjectRoot must not live inside QueueRoot`：项目源码和 `_queue` 放混了。移动 `_queue` 到项目目录外，或重新传入正确的 `-QueueRoot`。
 

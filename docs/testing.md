@@ -9,7 +9,7 @@
 | L0 静态与契约检查 | 确认 Python 3.12、脚本语法、基础命令入口、队列路径契约 | 每次提交前 | `tools\run_quality_checks.ps1` |
 | L1 模块冒烟 | 后端导入、doctor、自检、前端构建、worker dry-run | 每次涉及代码或脚本改动 | `tools\run_quality_checks.ps1` |
 | L2 分布式队列冒烟 | 验证入队、CPU/GPU worker 参数、状态流转、租约释放 | 改动分布式脚本或队列 API 后 | 本文“分布式队列用例” |
-| L3 端到端视频处理 | 验证下载、ASR、Codex、截图、HTML、质量文件 | 改动媒体/ASR/Codex/截图逻辑后 | 本文“端到端视频用例” |
+| L3 端到端视频处理 | 验证下载、ASR、OpenCode、截图、HTML、质量文件 | 改动媒体/ASR/OpenCode/截图逻辑后 | 本文“端到端视频用例” |
 | L4 人工 UI 验收 | 验证前端交互、队列看板、错误展示和移动端布局 | 改动前端页面后 | 本文“前端验收用例” |
 
 ## 一键质量检查
@@ -45,7 +45,7 @@ tools\run_quality_checks.ps1 -SkipFrontendBuild
 
 - Manifest 解析、Windows 文件名清洗、重复 slug 去重、选择器过滤。
 - 队列看板数据归一化、p 序排序、lease 过期判断、运行契约命令。
-- 分布式队列入队、认领、dry-run 释放、prepare/codex 完成状态、artifact 导入导出。
+- 分布式队列入队、认领、dry-run 释放、prepare/opencode 完成状态、artifact 导入导出。
 - Doctor 对 Python 3.12、队列目录分离、GPU SMB ProjectRoot 禁止策略的报告。
 - 存储布局检查：标准 `_queue` 子目录、父级 legacy 目录、job artifact 路径元数据修复。
 - 生成产物校验：必需文件、质量文件、未收尾 `#image[]`、纯数字图片 alt、缺失截图。
@@ -54,7 +54,7 @@ tools\run_quality_checks.ps1 -SkipFrontendBuild
 
 - 真实 B 站/公开视频下载。
 - 真实 GPU `faster-whisper` 转写。
-- 真实 Codex CLI 长视频生成。
+- 真实 OpenCode CLI 长视频生成。
 - 浏览器交互、队列看板视觉布局和移动端布局。
 
 ## L0 静态与契约用例
@@ -168,7 +168,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\start_worker.ps1 -Role
 期望：
 
 - 两条命令都输出 `AI-Media2Doc doctor: OK`。
-- CPU 检查能识别 Codex CLI。
+- CPU 检查能识别 OpenCode CLI。
 - Frontend 检查能识别 node/npm。
 
 ### TC-L1-005 存储布局自检
@@ -272,7 +272,7 @@ tools\start_worker.ps1 -Role cpu -QueueRoot D:\StudyReference\m2m_queue\_queue -
 
 ## L3 端到端视频用例
 
-这些用例会下载媒体、调用 ASR 和 Codex，耗时较长，只在改动核心链路后执行。
+这些用例会下载媒体、调用 ASR 和 OpenCode，耗时较长，只在改动核心链路后执行。
 
 ### TC-L3-001 单视频完整处理
 
@@ -309,13 +309,13 @@ tools\batch_video_notes.cmd --manifest output\smoke.json --only smoke_video
 步骤：
 
 ```powershell
-tools\batch_video_notes.cmd --manifest output\smoke.json --only smoke_video --skip-codex
+tools\batch_video_notes.cmd --manifest output\smoke.json --only smoke_video --skip-opencode
 tools\parallel_regenerate.cmd --slug smoke_video --jobs 1 --merge-strategy assemble --no-clear-screenshots
 ```
 
 期望：
 
-- 第一条命令只生成 `transcript.json`、`transcript.srt`、`codex_prompt.md`。
+- 第一条命令只生成 `transcript.json`、`transcript.srt`、`opencode_prompt.md`。
 - 第二条命令生成 `notes.md`、`notes.html`、质量文件和截图。
 - 重复执行第二条命令会复用已有 chunk，除非显式传 `--force-chunks`。
 
@@ -383,6 +383,6 @@ tools\parallel_regenerate.cmd --slug smoke_video --jobs 1 --merge-strategy assem
 - [ ] 根 README 只保留入口说明，细节链接到专题文档。
 - [ ] 后端/前端 README 没有重复的大段快速开始内容。
 - [ ] 没有引用已删除的旧图片、赞助或英文 README。
-- [ ] `rg -n "backend\\.venv|\\.venv-worker|Python 3\\.10|distributed_prepare_worker|distributed_codex_worker" README.md docs backend frontend tools skills --glob "!docs/testing.md"` 无有效命中。
+- [ ] `rg -n "backend\\.venv|\\.venv-worker|Python 3\\.10|distributed_prepare_worker|distributed_opencode_worker" README.md docs backend frontend tools skills --glob "!docs/testing.md"` 无有效命中。
 - [ ] `tools\run_quality_checks.ps1` 通过，或明确记录未运行原因。
 - [ ] 涉及前端时 `npm run build` 通过。
