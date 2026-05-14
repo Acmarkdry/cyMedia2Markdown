@@ -181,6 +181,18 @@ backend_video_notes_quality.json
 
 请只处理你拥有权利、已获授权，或依法可进行个人学习、研究、引用和整理的音视频内容。公开视频链接不等于可再分发内容；由本工具生成的转写稿、截图、笔记和 HTML 可能仍受原始音视频版权约束。
 
+## 迁移说明
+
+本项目原使用 **OpenAI Codex CLI** 作为 LLM 后端。为提升通用性和可维护性，已于近期全面迁移至 **OpenCode CLI**：
+
+- 环境变量 `CODEX_CLI_*` → `OPENCODE_CLI_*`
+- Python 函数 `run_codex_cli()` → `run_opencode_cli()`
+- 队列状态 `codex_running/failed` → `opencode_running/failed`
+- 前端看板、Worker 脚本、Doctor 自检、测试用例已同步更新
+- `variables_template.env` 模板已更新为新的变量名
+
+已有使用 `CODEX_CLI_*` 的本地 `.env` 文件需手动改为 `OPENCODE_CLI_*`。
+
 ## 鸣谢
 
 感谢上游 AI-Media2Doc 作者和贡献者提供基础实现与 MIT 开源许可。感谢 `faster-whisper`、`yt-dlp`、`imageio-ffmpeg`、Vue、Element Plus、ffmpeg.wasm 和 simple-mind-map 等项目。
