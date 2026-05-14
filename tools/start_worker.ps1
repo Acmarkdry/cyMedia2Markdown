@@ -10,7 +10,7 @@ param(
     [Nullable[int]]$MaxTokens = $null,
     [string]$Remarks = "",
     [int]$MergeGroupSize = 3,
-    [ValidateSet("codex", "assemble")]
+    [ValidateSet("opencode", "assemble")]
     [string]$MergeStrategy = "assemble",
     [int]$PollInterval = 30,
     [int]$MediaTimeout = 1800,
@@ -67,9 +67,9 @@ if (-not (Test-Path $Python)) {
 }
 
 if ($Role -eq "cpu") {
-    $LocalCodex = Join-Path $env:USERPROFILE ".local\bin\codex.exe"
-    if (Test-Path $LocalCodex) {
-        $env:CODEX_CLI_PATH = $LocalCodex
+    $LocalOpenCode = Join-Path $env:USERPROFILE ".local\bin\opencode.exe"
+    if (Test-Path $LocalOpenCode) {
+        $env:OPENCODE_CLI_PATH = $LocalOpenCode
     }
 }
 
