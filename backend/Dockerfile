@@ -35,9 +35,9 @@ WORKDIR /app
 COPY --from=builder /.venv /.venv
 ADD ./ ./
 
-ENV CODEX_CLI_PATH="codex" \
-    CODEX_CLI_MODEL="gpt-5.5" \
-    CODEX_CLI_REASONING_EFFORT="xhigh" \
+ENV OPENCODE_CLI_PATH="opencode" \
+    OPENCODE_CLI_MODEL="gpt-5.5" \
+    OPENCODE_CLI_REASONING_EFFORT="xhigh" \
     LOCAL_UPLOAD_DIR="local_storage/uploads" \
     LOCAL_MEDIA_DIR="local_storage/media" \
     LOCAL_SCREENSHOT_DIR="local_storage/screenshots" \

@@ -26,7 +26,7 @@ def worker_args(**overrides):
 
 
 class DistributedQueueTests(unittest.TestCase):
-    def test_enqueue_claim_release_and_finish_codex(self) -> None:
+    def test_enqueue_claim_release_and_finish_opencode(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             queue_root = root / "queue"
@@ -60,11 +60,11 @@ class DistributedQueueTests(unittest.TestCase):
             dvn.finish_job(queue_root, "BVtest_p01", "prepare", "gpu-worker", True, queue_root / "logs" / "p.log", 0)
             self.assertEqual(dvn.load_job(job_file)["state"], "prepared")
 
-            claimed = dvn.claim_job(queue_root, "codex", "cpu-worker", worker_args())
+            claimed = dvn.claim_job(queue_root, "opencode", "cpu-worker", worker_args())
             self.assertIsNotNone(claimed)
-            dvn.finish_job(queue_root, "BVtest_p01", "codex", "cpu-worker", False, queue_root / "logs" / "c.log", 1, "boom")
+            dvn.finish_job(queue_root, "BVtest_p01", "opencode", "cpu-worker", False, queue_root / "logs" / "c.log", 1, "boom")
             failed = dvn.load_job(job_file)
-            self.assertEqual(failed["state"], "codex_failed")
+            self.assertEqual(failed["state"], "opencode_failed")
             self.assertEqual(failed["last_error"]["message"], "boom")
 
     def test_finish_job_normalizes_legacy_artifact_path_metadata(self) -> None:
@@ -78,7 +78,7 @@ class DistributedQueueTests(unittest.TestCase):
                 json.dumps(
                     {
                         "job_id": "BVtest_p01",
-                        "state": "codex_running",
+                        "state": "opencode_running",
                         "owner": "cpu-worker",
                         "video": {"slug": "第一讲"},
                         "paths": {
@@ -96,7 +96,7 @@ class DistributedQueueTests(unittest.TestCase):
             dvn.finish_job(
                 queue_root,
                 "BVtest_p01",
-                "codex",
+                "opencode",
                 "cpu-worker",
                 True,
                 queue_root / "logs" / "c.log",
@@ -108,7 +108,7 @@ class DistributedQueueTests(unittest.TestCase):
             self.assertEqual(Path(finished["paths"]["artifact_dir"]), queue_root / "artifacts" / "BVtest_p01")
             self.assertEqual(Path(finished["paths"]["artifact_media"]), queue_root / "artifacts" / "BVtest_p01" / "media" / "video.mp4")
 
-    def test_artifact_roundtrip_and_codex_output_validation(self) -> None:
+    def test_artifact_roundtrip_and_opencode_output_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             project = root / "project"
@@ -122,7 +122,7 @@ class DistributedQueueTests(unittest.TestCase):
             (out / "status.json").write_text(json.dumps({"media": {"video_filename": "video.mp4"}}), encoding="utf-8")
             (out / "transcript.json").write_text("{}", encoding="utf-8")
             (out / "transcript.srt").write_text("1\n", encoding="utf-8")
-            (out / "codex_prompt.md").write_text("prompt", encoding="utf-8")
+            (out / "opencode_prompt.md").write_text("prompt", encoding="utf-8")
             job = {"job_id": "job1", "video": {"slug": slug}}
 
             paths = dvn.publish_prepared_artifact(project, queue_root, job)
@@ -140,7 +140,7 @@ class DistributedQueueTests(unittest.TestCase):
                 json.dumps({"quality": {"passed": True}}),
                 encoding="utf-8",
             )
-            ok, reason = dvn.codex_output_ok(imported, slug)
+            ok, reason = dvn.opencode_output_ok(imported, slug)
             self.assertTrue(ok, reason)
 
 

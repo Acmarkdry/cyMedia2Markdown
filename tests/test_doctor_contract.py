@@ -30,8 +30,8 @@ def fake_run_ok(command: list[str], timeout: int = 12):
         return True, "Python 3.12.10"
     if command[0] in {"node", "npm"}:
         return True, "ok"
-    if "codex" in command[0]:
-        return True, "codex-cli test"
+    if "opencode" in command[0]:
+        return True, "opencode-cli test"
     return True, "ok"
 
 
@@ -43,7 +43,7 @@ class DoctorContractTests(unittest.TestCase):
             queue_root = root / "_queue"
             queue_root.mkdir()
             args = argparse.Namespace(role="cpu", project_root=project, queue_root=queue_root, api_base=m2m_doctor.DEFAULT_API_BASE)
-            with patch.object(m2m_doctor, "run_ok", side_effect=fake_run_ok), patch.object(m2m_doctor.shutil, "which", return_value="codex"):
+            with patch.object(m2m_doctor, "run_ok", side_effect=fake_run_ok), patch.object(m2m_doctor.shutil, "which", return_value="opencode"):
                 report = m2m_doctor.build_report(args)
         self.assertTrue(report["ok"], report["errors"])
         self.assertIn(".venv-cpu", report["python"]["selected"])
@@ -53,7 +53,7 @@ class DoctorContractTests(unittest.TestCase):
             queue_root = Path(temp) / "share"
             project = make_project(queue_root)
             args = argparse.Namespace(role="cpu", project_root=project, queue_root=queue_root, api_base=m2m_doctor.DEFAULT_API_BASE)
-            with patch.object(m2m_doctor, "run_ok", side_effect=fake_run_ok), patch.object(m2m_doctor.shutil, "which", return_value="codex"):
+            with patch.object(m2m_doctor, "run_ok", side_effect=fake_run_ok), patch.object(m2m_doctor.shutil, "which", return_value="opencode"):
                 report = m2m_doctor.build_report(args)
         self.assertFalse(report["ok"])
         self.assertTrue(any("project_root must not be inside queue_root" in error for error in report["errors"]))

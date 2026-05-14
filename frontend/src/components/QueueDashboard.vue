@@ -27,10 +27,10 @@ const stateMeta = {
   queued: { label: '待准备', type: 'info' },
   prepare_running: { label: '准备中', type: 'warning' },
   prepared: { label: '待生成', type: 'success' },
-  codex_running: { label: '生成中', type: 'primary' },
+  opencode_running: { label: '生成中', type: 'primary' },
   done: { label: '完成', type: 'success' },
   prepare_failed: { label: '准备失败', type: 'danger' },
-  codex_failed: { label: '生成失败', type: 'danger' }
+  opencode_failed: { label: '生成失败', type: 'danger' }
 }
 
 const stageMeta = {
@@ -106,11 +106,11 @@ const pipeline = computed(() => [
     icon: VideoPlay
   },
   {
-    key: 'codex',
-    title: 'Codex 生成',
+    key: 'opencode',
+    title: 'OpenCode 生成',
     subtitle: '导入 artifact 后生成笔记',
-    count: stateCounts.value.codex_running || 0,
-    extra: `${stateCounts.value.codex_failed || 0} 个失败`,
+    count: stateCounts.value.opencode_running || 0,
+    extra: `${stateCounts.value.opencode_failed || 0} 个失败`,
     icon: Operation
   },
   {
@@ -176,7 +176,7 @@ const leaseText = job => {
   return job.lease_expired ? `租约已过期：${formatTime(job.lease_until_iso)}` : `租约至：${formatTime(job.lease_until_iso)}`
 }
 
-const attemptsText = job => `prepare ${job.prepare_attempts || 0} / codex ${job.codex_attempts || 0}`
+const attemptsText = job => `prepare ${job.prepare_attempts || 0} / opencode ${job.opencode_attempts || 0}`
 
 const eventText = event => {
   const parts = [event.event, event.stage].filter(Boolean)
@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
           Distributed Queue
         </div>
         <h1>分布式任务流程看板</h1>
-        <p>实时读取共享队列目录，跟踪 GPU 准备、Codex 生成、租约心跳和待办顺序。</p>
+        <p>实时读取共享队列目录，跟踪 GPU 准备、OpenCode 生成、租约心跳和待办顺序。</p>
       </div>
       <div class="queue-actions">
         <el-switch v-model="autoRefresh" active-text="自动刷新" />
@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
         <div class="panel-header">
           <div>
             <h2>后续待办</h2>
-            <p>按课程 p 序和 job id 排列，prepared 会优先等待 Codex 消费。</p>
+            <p>按课程 p 序和 job id 排列，prepared 会优先等待 OpenCode 消费。</p>
           </div>
           <el-tag type="success" effect="plain">{{ todoJobs.length }}</el-tag>
         </div>

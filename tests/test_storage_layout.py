@@ -66,7 +66,7 @@ class StorageLayoutTests(unittest.TestCase):
     def test_running_jobs_are_not_repaired_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             _, queue = make_layout(Path(temp))
-            job_path = write_job(queue, state="codex_running")
+            job_path = write_job(queue, state="opencode_running")
 
             self.assertFalse(layout.repair_job_paths(queue, job_path, include_running=False))
             stale = json.loads(job_path.read_text(encoding="utf-8"))
