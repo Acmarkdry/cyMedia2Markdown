@@ -18,19 +18,19 @@ from models import ChatRequest, TranscriptSegment, VideoNotesRequest
 
 router = APIRouter(prefix="/llm", tags=["LLM"])
 
-CODEX_TEXT_GENERATION_INSTRUCTION = """你正在作为 AI-Media2Doc 的文本生成后端。
+OPENCODE_TEXT_GENERATION_INSTRUCTION = """你正在作为 AI-Media2Doc 的文本生成后端。
 只根据下面传入的消息生成回复。
 不要读取或修改本地文件，不要运行命令，不要解释你的执行过程。
 如果用户要求 Markdown，则只输出 Markdown 正文。"""
 
 
 def build_prompt(request: ChatRequest) -> str:
-    """将前端传来的 chat messages 转为 Codex CLI 的单次 prompt。"""
+    """将前端传来的 chat messages 转为 OpenCode CLI 的单次 prompt。"""
     messages = [
         f"<message role=\"{message.role}\">\n{message.content}\n</message>"
         for message in request.messages
     ]
-    prompt_parts = [CODEX_TEXT_GENERATION_INSTRUCTION, *messages]
+    prompt_parts = [OPENCODE_TEXT_GENERATION_INSTRUCTION, *messages]
     if request.max_tokens:
         prompt_parts.append(f"请尽量将输出控制在约 {request.max_tokens} tokens 以内。")
     return "\n\n".join(prompt_parts)
@@ -39,10 +39,10 @@ def build_prompt(request: ChatRequest) -> str:
 def make_chat_response(content: str):
     """保持前端依赖的 OpenAI-like choices 响应结构。"""
     return {
-        "id": f"codex-{uuid.uuid4().hex}",
+        "id": f"opencode-{uuid.uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": env.CODEX_CLI_MODEL,
+        "model": env.OPENCODE_CLI_MODEL,
         "choices": [
             {
                 "index": 0,
@@ -296,7 +296,7 @@ def scale_merge_targets(targets: dict, note_count: int, total_count: int) -> dic
     return adjusted
 
 
-def merge_chunk_notes_with_codex(
+def merge_chunk_notes_with_opencode(
     title: str,
     source_url: str | None,
     chunk_notes: list[str],
@@ -308,7 +308,7 @@ def merge_chunk_notes_with_codex(
 ) -> tuple[str, str]:
     if group_size < 2 or len(chunk_notes) <= group_size:
         prompt = build_merge_prompt(title, source_url, chunk_notes, targets, remarks, max_tokens=max_tokens)
-        return run_codex_cli(prompt, timeout), prompt
+        return run_opencode_cli(prompt, timeout), prompt
 
     grouped_notes: list[str] = []
     group_count = (len(chunk_notes) + group_size - 1) // group_size
@@ -324,10 +324,10 @@ def merge_chunk_notes_with_codex(
             remarks,
             max_tokens=max_tokens,
         )
-        grouped_notes.append(run_codex_cli(group_prompt, timeout))
+        grouped_notes.append(run_opencode_cli(group_prompt, timeout))
 
     prompt = build_merge_prompt(title, source_url, grouped_notes, targets, remarks, max_tokens=max_tokens)
-    return run_codex_cli(prompt, timeout), prompt
+    return run_opencode_cli(prompt, timeout), prompt
 
 
 def assess_markdown_quality(markdown: str, targets: dict) -> dict:
@@ -430,28 +430,28 @@ def build_retry_prompt(original_prompt: str, previous_markdown: str, quality: di
 """
 
 
-def run_codex_cli(prompt: str, timeout: Optional[int] = None) -> str:
-    """通过本机 Codex CLI 调用已登录的 Codex/ChatGPT 能力。"""
+def run_opencode_cli(prompt: str, timeout: Optional[int] = None) -> str:
+    """通过本机 OpenCode CLI 调用已登录的 OpenCode/ChatGPT 能力。"""
     timeout_seconds = timeout or 120
-    with tempfile.TemporaryDirectory(prefix="ai-media2doc-codex-") as temp_dir:
-        output_path = Path(temp_dir) / "codex_last_message.md"
-        codex_cmd = (
-            env.CODEX_CLI_PATH
-            if env.CODEX_CLI_PATH and env.CODEX_CLI_PATH != "codex"
+    with tempfile.TemporaryDirectory(prefix="ai-media2doc-opencode-") as temp_dir:
+        output_path = Path(temp_dir) / "opencode_last_message.md"
+        opencode_cmd = (
+            env.OPENCODE_CLI_PATH
+            if env.OPENCODE_CLI_PATH and env.OPENCODE_CLI_PATH != "opencode"
             else (
-                shutil.which("codex.cmd")
-                or shutil.which("codex.exe")
-                or shutil.which("codex")
-                or "codex"
+                shutil.which("opencode.cmd")
+                or shutil.which("opencode.exe")
+                or shutil.which("opencode")
+                or "opencode"
             )
         )
         cmd = [
-            codex_cmd,
+            opencode_cmd,
             "exec",
             "-m",
-            env.CODEX_CLI_MODEL,
+            env.OPENCODE_CLI_MODEL,
             "-c",
-            f'model_reasoning_effort="{env.CODEX_CLI_REASONING_EFFORT}"',
+            f'model_reasoning_effort="{env.OPENCODE_CLI_REASONING_EFFORT}"',
             "--sandbox",
             "read-only",
             "--skip-git-repo-check",
@@ -470,13 +470,13 @@ def run_codex_cli(prompt: str, timeout: Optional[int] = None) -> str:
             )
         except (FileNotFoundError, PermissionError) as exc:
             raise ExternalServiceException(
-                "Codex CLI",
-                f"Codex CLI not found or not executable: {codex_cmd}. Please install Codex CLI and run `codex login`.",
+                "OpenCode CLI",
+                f"OpenCode CLI not found or not executable: {opencode_cmd}. Please install OpenCode CLI and run `opencode login`.",
             ) from exc
         except subprocess.TimeoutExpired as exc:
             raise ExternalServiceException(
-                "Codex CLI",
-                f"Codex CLI timed out after {timeout_seconds} seconds. Increase timeout in settings.",
+                "OpenCode CLI",
+                f"OpenCode CLI timed out after {timeout_seconds} seconds. Increase timeout in settings.",
             ) from exc
 
         if result.returncode != 0:
@@ -484,8 +484,8 @@ def run_codex_cli(prompt: str, timeout: Optional[int] = None) -> str:
                 "utf-8", errors="replace"
             ).strip()
             raise ExternalServiceException(
-                "Codex CLI",
-                f"codex exec failed with exit code {result.returncode}",
+                "OpenCode CLI",
+                f"opencode exec failed with exit code {result.returncode}",
                 details=details,
             )
 
@@ -494,8 +494,8 @@ def run_codex_cli(prompt: str, timeout: Optional[int] = None) -> str:
                 "utf-8", errors="replace"
             ).strip()
             raise ExternalServiceException(
-                "Codex CLI",
-                "codex exec completed but did not write --output-last-message",
+                "OpenCode CLI",
+                "opencode exec completed but did not write --output-last-message",
                 details=details,
             )
 
@@ -504,8 +504,8 @@ def run_codex_cli(prompt: str, timeout: Optional[int] = None) -> str:
 
 @router.post("/completions", response_model=APIResponse)
 async def default_chat(request: ChatRequest):
-    """默认聊天接口：使用 Codex CLI，而不是 OpenAI API。"""
-    content = run_codex_cli(build_prompt(request), request.timeout)
+    """默认聊天接口：使用 OpenCode CLI，而不是 OpenAI API。"""
+    content = run_opencode_cli(build_prompt(request), request.timeout)
     return success_response(
         data=make_chat_response(content),
         message="Chat completed successfully",
@@ -514,9 +514,9 @@ async def default_chat(request: ChatRequest):
 
 @router.post("/markdown-generation", response_model=APIResponse)
 async def generate_markdown_text(request: ChatRequest):
-    """生成 Markdown 文本：使用 Codex CLI，而不是 OpenAI API。"""
+    """生成 Markdown 文本：使用 OpenCode CLI，而不是 OpenAI API。"""
     prompt = build_prompt(request)
-    content = run_codex_cli(prompt, request.timeout)
+    content = run_opencode_cli(prompt, request.timeout)
     return success_response(
         data=make_chat_response(content),
         message="Chat completed successfully",
@@ -527,7 +527,7 @@ async def generate_markdown_text(request: ChatRequest):
 async def generate_video_notes(request: VideoNotesRequest):
     """根据带时间戳的 transcript 生成高密度视频学习笔记。
 
-    后端负责长视频分块、Codex 调用、合并和基础质检；前端只需要处理截图标记。
+    后端负责长视频分块、OpenCode 调用、合并和基础质检；前端只需要处理截图标记。
     """
     title = request.title or "视频学习笔记"
     source_url = request.source_url
@@ -566,8 +566,8 @@ async def generate_video_notes(request: VideoNotesRequest):
                 part_label=part_label,
                 max_tokens=request.max_tokens,
             )
-            chunk_notes.append(run_codex_cli(prompt, timeout))
-        content, prompt_used = merge_chunk_notes_with_codex(
+            chunk_notes.append(run_opencode_cli(prompt, timeout))
+        content, prompt_used = merge_chunk_notes_with_opencode(
             title,
             source_url,
             chunk_notes,
@@ -584,13 +584,13 @@ async def generate_video_notes(request: VideoNotesRequest):
             remarks=request.remarks,
             max_tokens=request.max_tokens,
         )
-        content = run_codex_cli(prompt_used, timeout)
+        content = run_opencode_cli(prompt_used, timeout)
 
     quality = assess_markdown_quality(content, targets)
     retried = False
     if request.quality_retry and not quality["passed"]:
         retry_prompt = build_retry_prompt(prompt_used, content, quality)
-        retry_content = run_codex_cli(retry_prompt, timeout)
+        retry_content = run_opencode_cli(retry_prompt, timeout)
         retry_quality = assess_markdown_quality(retry_content, targets)
         if retry_quality["passed"] or retry_quality["chars"] > quality["chars"]:
             content = retry_content
