@@ -13,7 +13,7 @@ import distributed_video_notes as queue
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNNING_STATES = {"prepare_running", "codex_running"}
+RUNNING_STATES = {"prepare_running", "opencode_running"}
 QUEUE_CHILDREN = ["jobs", "artifacts", "logs", "work", "work/manifests"]
 
 
