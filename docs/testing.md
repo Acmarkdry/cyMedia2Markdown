@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | L0 静态与契约检查 | 确认 Python 3.12、脚本语法、基础命令入口、队列路径契约 | 每次提交前 | `tools\run_quality_checks.ps1` |
 | L1 模块冒烟 | 后端导入、doctor、自检、前端构建、worker dry-run | 每次涉及代码或脚本改动 | `tools\run_quality_checks.ps1` |
+| L1-ArticleWashing 文章洗稿测试 | 验证文章清单加载、洗稿 API 调用、响应格式和错误处理 | 每次涉及洗稿工具改动后 | `python -m unittest tests.test_article_washing -v` |
 | L2 分布式队列冒烟 | 验证入队、CPU/GPU worker 参数、状态流转、租约释放 | 改动分布式脚本或队列 API 后 | 本文“分布式队列用例” |
 | L3 端到端视频处理 | 验证下载、ASR、OpenCode、截图、HTML、质量文件 | 改动媒体/ASR/OpenCode/截图逻辑后 | 本文“端到端视频用例” |
 | L4 人工 UI 验收 | 验证前端交互、队列看板、错误展示和移动端布局 | 改动前端页面后 | 本文“前端验收用例” |
