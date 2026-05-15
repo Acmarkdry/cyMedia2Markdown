@@ -46,7 +46,8 @@ npm run dev
 | 文档 | 说明 |
 |------|------|
 | [docs/installation.md](./docs/installation.md) | 详细安装、多角色环境配置、环境变量、自检命令 |
-| [docs/workflows.md](./docs/workflows.md) | 常用工作流：URL→笔记、并行重生成、分布式处理、赛博洗稿 |
+| [docs/workflows-video.md](./docs/workflows-video.md) | 视频处理工作流：URL→笔记、并行重生成、分布式处理 |
+| [docs/workflows-washing.md](./docs/workflows-washing.md) | 赛博洗稿工作流：文章提取、两阶段 AI、Prompt 编写指南 |
 | [docs/distributed_windows.md](./docs/distributed_windows.md) | 分布式处理完整规范（队列契约、Worker 参数、故障恢复） |
 | [docs/testing.md](./docs/testing.md) | 测试分层、用例、验收规范 |
 | [docs/output-convention.md](./docs/output-convention.md) | 输出目录结构和产物说明 |
