@@ -1,12 +1,26 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, FolderOpened, Document, RefreshRight, CopyDocument, Download } from '@element-plus/icons-vue'
 import { washArticles } from '../../apis/washingService'
+import { WASHING_PROMPT_PRESETS } from '../../constants'
 // Types are imported from types.ts but used as plain JS here
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt()
+
+// ─── Prompt Presets ───
+const promptPresets = WASHING_PROMPT_PRESETS
+const selectedPreset = ref(promptPresets[0].label)
+
+const applyPreset = (label) => {
+  const preset = promptPresets.find(p => p.label === label)
+  if (preset) {
+    contextPrompt.value = preset.context_prompt
+    refinementPrompt.value = preset.refinement_prompt
+    selectedPreset.value = label
+  }
+}
 
 // ─── Article URLs ───
 const urls = ref([{ value: '' }])
@@ -188,8 +202,6 @@ const startWashing = async () => {
 const resetAll = () => {
   urls.value = [{ value: '' }]
   codeProjects.value = []
-  contextPrompt.value = ''
-  refinementPrompt.value = ''
   selectedStyle.value = 'deep'
   timeoutValue.value = 600
   maxTokensValue.value = 16384
@@ -201,6 +213,7 @@ const resetAll = () => {
   domainSummary.value = ''
   refinedMarkdown.value = ''
   activeResultTab.value = 'final'
+  applyPreset(promptPresets[0].label)
 }
 
 const copyMarkdown = async () => {
@@ -225,16 +238,10 @@ const downloadMarkdown = () => {
   ElMessage.success('下载已开始')
 }
 
-const getLanguageColor = (lang) => {
-  const colors = {
-    python: '#3572A5', javascript: '#f1e05a', typescript: '#2b7489',
-    java: '#b07219', cpp: '#f34b7d', c: '#555555', go: '#00ADD8',
-    rust: '#dea584', ruby: '#701516', php: '#4F5D95', html: '#e34c26',
-    css: '#563d7c', vue: '#41b883', react: '#61dafb', sql: '#e38c00',
-    shell: '#89e051', yaml: '#171d2e', json: '#292929', markdown: '#083fa1'
-  }
-  return colors[lang.toLowerCase()] || '#909399'
-}
+// Initialize with default preset
+onMounted(() => {
+  applyPreset(promptPresets[0].label)
+})
 </script>
 
 <template>
@@ -313,6 +320,22 @@ const getLanguageColor = (lang) => {
               <span class="card-title">Prompt 配置</span>
             </div>
           </template>
+
+          <div class="prompt-section">
+            <label class="prompt-label">Prompt 预设模板</label>
+            <div class="preset-tabs">
+              <button
+                v-for="preset in promptPresets"
+                :key="preset.label"
+                class="preset-tab"
+                :class="{ active: selectedPreset === preset.label }"
+                @click="applyPreset(preset.label)"
+                :title="preset.description"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+          </div>
 
           <div class="prompt-section">
             <label class="prompt-label">上下文提示 (Stage 1)</label>
@@ -653,6 +676,37 @@ const getLanguageColor = (lang) => {
   font-weight: 600;
   color: #1a1a2e;
   margin-bottom: 8px;
+}
+
+/* ─── Preset Tabs ─── */
+.preset-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preset-tab {
+  padding: 6px 14px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #fff;
+  color: #606266;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.preset-tab:hover {
+  border-color: #409eff;
+  color: #409eff;
+}
+
+.preset-tab.active {
+  background: #409eff;
+  border-color: #409eff;
+  color: #fff;
+  font-weight: 600;
 }
 
 .prompt-textarea :deep(.el-textarea__inner) {
