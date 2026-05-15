@@ -1,0 +1,17 @@
+[
+  {
+    "title": "UE5 大规模开放世界性能优化实践",
+    "url": "https://zhuanlan.zhihu.com/p/123456789"
+  },
+  {
+    "title": "深入理解 GAS 游戏技能系统架构设计",
+    "url": "https://www.example.com/gas-architecture-deep-dive"
+  },
+  {
+    "title": "现代渲染管线与 Nanite 技术解析",
+    "url": "https://blog.csdn.net/example/article/details/9876543210"
+  },
+  {
+    "_comment": "title 为可选字段，留空时工具将使用 URL 哈希生成 slug。url 为必填字段。"
+  }
+]
