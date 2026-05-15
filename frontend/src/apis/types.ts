@@ -132,6 +132,119 @@ export interface Task {
   createdAt: string;
 }
 
+/**
+ * 文章来源信息
+ */
+export interface ArticleSource {
+  /** 文章URL */
+  url: string;
+  /** 文章标题（提取后填充） */
+  title?: string;
+}
+
+/**
+ * 文章元数据
+ */
+export interface ArticleMetadata {
+  author?: string;
+  date?: string;
+  description?: string;
+  sitename?: string;
+}
+
+/**
+ * 单篇文章提取结果
+ */
+export interface ArticleExtractResult {
+  /** 原始URL */
+  url: string;
+  /** 文章标题 */
+  title?: string;
+  /** 提取的Markdown内容 */
+  markdown_content: string;
+  /** HTML内容 */
+  html_content?: string;
+  /** 提取方式 */
+  extraction_method: string;
+  /** 文章元数据 */
+  metadata?: ArticleMetadata;
+  /** 关键要点 */
+  key_points?: string;
+}
+
+/**
+ * 本地代码工程配置
+ */
+export interface LocalCodeProject {
+  path: string;
+  label: string;
+  file_patterns?: string[];
+}
+
+/**
+ * 代码文件信息
+ */
+export interface CodeFile {
+  project_label: string;
+  relative_path: string;
+  content: string;
+  language: string;
+}
+
+/**
+ * 赛博洗稿请求参数
+ */
+export interface ArticleWashingRequest {
+  /** 文章来源列表 */
+  articles: ArticleSource[];
+  /** 本地代码工程列表 */
+  code_projects?: LocalCodeProject[];
+  /** 上下文提示：描述这些文章是关于什么的 */
+  context_prompt: string;
+  /** 洗稿提示：用于深化提取的prompt */
+  refinement_prompt: string;
+  /** 输出风格 */
+  style?: string;
+  /** LLM超时时间（秒） */
+  timeout?: number;
+  /** LLM最大token数 */
+  max_tokens?: number;
+}
+
+/**
+ * 赛博洗稿响应结果
+ */
+export interface ArticleWashingResponse {
+  /** 提取的各篇文章内容 */
+  extracted_articles: ArticleExtractResult[];
+  /** 代码文件列表 */
+  code_files?: CodeFile[];
+  /** 领域知识脉络 */
+  domain_summary: string;
+  /** 最终洗稿后的Markdown内容 */
+  refined_output: string;
+  /** Stage 1 提示词 */
+  stage1_prompt?: string;
+  /** Stage 2 提示词 */
+  stage2_prompt?: string;
+}
+
+/**
+ * 读取代码工程请求
+ */
+export interface ReadCodeRequest {
+  projects: LocalCodeProject[];
+  max_files_per_project?: number;
+}
+
+/**
+ * 读取代码工程响应
+ */
+export interface ReadCodeResponse {
+  files: CodeFile[];
+  errors?: Array<{ path: string; error: string }>;
+}
+
 // 兼容旧代码的类型别名
 export interface AudioTaskResponse extends UploadUrlResponse {}
 

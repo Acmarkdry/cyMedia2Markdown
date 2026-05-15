@@ -5,6 +5,7 @@ import * as chatService from './chatService'
 import * as healthService from './healthService'
 import * as queueService from './queueService'
 import * as secretsService from './secretsService' // 新增
+import * as washingService from './washingService'
 import httpService from './http'
 
 // 从各个服务中导出常用函数
@@ -15,6 +16,7 @@ export const { sendChatMessage } = chatService
 export const { checkHealth } = healthService
 export const { getQueueStatus } = queueService
 export const { getSecrets } = secretsService // 新增
+export const { extractArticle, washArticles, readCodeProjects } = washingService
 
 // 导出所有服务
 export {
@@ -25,6 +27,7 @@ export {
   healthService,
   queueService,
   secretsService, // 新增
+  washingService,
   httpService
 }
 
@@ -40,5 +43,6 @@ export default {
   health: healthService,
   queue: queueService,
   secrets: secretsService, // 新增
+  washing: washingService,
   http: httpService
 }

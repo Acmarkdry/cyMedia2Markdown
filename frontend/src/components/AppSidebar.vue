@@ -271,13 +271,13 @@ const handleDeleteTask = async (event, task) => {
 
 <style scoped>
 .app-sidebar {
-    height: 100vh;
+    height: calc(100vh - 56px);
     width: 260px;
     display: flex;
     flex-direction: column;
     position: fixed;
     left: 0;
-    top: 0;
+    top: 56px;
     z-index: 1000;
     background-color: #f7f8fa;
     /* 修改阴影为四周都明显 */
